@@ -49,7 +49,7 @@
 | **KEY_DRV2** | `P0.22` | `AD18` | Pin 14 | 矩阵列 2 驱动，`col-gpios` 分配 |
 | **KEY_DRV3** | `P0.24` | `AD20` | Pin 16 | 矩阵列 3 驱动，`col-gpios` 分配 |
 | **KEY_DRV4** | `P1.01` | `Y23` | Pin 26 | 矩阵列 4 驱动，`col-gpios` 分配 |
-| **KEY_DRV5** | `P0.25` | `AC21` | Pin 17 (FPC2端) | 矩阵列 5 驱动，`col-gpios` 分配 |
+| **KEY_DRV5** | `P0.25` | `AC21` | Pin 17 | 矩阵列 5 驱动，`col-gpios` 分配 |
 | **KEY_DRV6** | `P1.00` | `AD22` | Pin 25 | 矩阵列 6 驱动，`col-gpios` 分配 |
 | **KEY_DRV7** | `P0.21` | `AC17` | Pin 13 | 矩阵列 7 驱动，`col-gpios` 分配 |
 | **KEY_DRV8** | `P0.23` | `AC19` | Pin 15 | 矩阵列 8 驱动，`col-gpios` 分配 |
@@ -60,9 +60,9 @@
 | **KEY_DRV13** | `P1.05` | `T23` | Pin 30 | 矩阵列 13 驱动，`col-gpios` 分配 |
 | **KEY_DRV14** | `P0.17` | `AD12` | Pin 10 | 矩阵列 14 驱动，`col-gpios` 分配 |
 | **KEY_DRV15** | `P1.03` | `V23` | Pin 28 | 矩阵列 15 驱动，`col-gpios` 分配 |
-| **TP4CLK** | `P1.13` | `A16` | Pin 3 (FPC3) | 小红帽时钟端，PS/2 接口 |
-| **TP4DATA** | `P1.10` | `A20` | Pin 2 (FPC3) | 小红帽数据端，PS/2 接口 |
-| **TP4_RESET** | `P1.09` | `R1` | Pin 21 (FPC3) | 小红帽复位信号 |
+| **TP4CLK** | `P1.13` | `A16` | Pin 3 | 小红帽时钟端，PS/2 接口 |
+| **TP4DATA** | `P1.10` | `A20` | Pin 2 | 小红帽数据端，PS/2 接口 |
+| **TP4_RESET** | `P1.09` | `R1` | Pin 21 | 小红帽复位信号 |
 | **LEDCPSLOCK** | `P0.31` | `A8` | - | 大写锁定 (Caps Lock) 指示灯 (低电平点亮) |
 | **LEDPWR** | `P0.29` | `A10` | - | 电源状态指示灯 (低电平点亮) |
 | **-LED_MUTE** | `P1.15` | `A14` | - | 扬声器静音指示灯 (低电平点亮) |
