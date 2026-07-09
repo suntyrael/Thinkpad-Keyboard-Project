@@ -154,7 +154,7 @@ stateDiagram-v2
 ## 5. 🖱️ 小红帽指点杆 (TrackPoint) 配置与驱动
 
 小红帽指点杆基于 PS/2 协议实现，通过 ZMK 模块和硬件引脚配置完成驱动整合：
-*   **驱动依赖**：固件整合了 ZMK 社区指点杆驱动模块 `kb_zmk_ps2_mouse_trackpoint_driver` (by `infused-kim`)，采用 GPIO 模拟 bit-banging 方式实现高精度 PS/2 通信。
+*   **驱动依赖**：固件整合了 ZMK 社区指点杆驱动模块 `kb_zmk_ps2_mouse_trackpoint_driver` (by `tails-dev, 基于 infused-kim 原始版本进行了适配以支持主线 ZMK 编译`)，采用 GPIO 模拟 bit-banging 方式实现高精度 PS/2 通信。
 *   **物理管脚绑定**：
     *   `TP4CLK` -> `P1.13` (CLK 信号，开启内部上拉)
     *   `TP4DATA` -> `P1.10` (DATA 信号，开启内部上拉)
