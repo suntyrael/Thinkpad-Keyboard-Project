@@ -37,44 +37,76 @@
 
     kscan0: kscan_0 {
         compatible = "zmk,kscan-gpio-matrix";
-        diode-direction = "col2row"; /* TODO: Verify Diode Direction */
+        diode-direction = "col2row";
 
         row-gpios
-            = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE0 AC9 -> P0.14 */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE1 AC15 -> TODO */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE2 AC11 -> TODO */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE3 AD10 -> TODO */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE4 AD12 -> TODO */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE5 AD8  -> TODO */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE6 AC17 -> TODO */
-            , <&gpio0 0  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE7 AD16 -> TODO */
+            = <&gpio0 26 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE0 G1 -> P0.26 */
+            , <&gpio0 28 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE1 B11 -> P0.28 */
+            , <&gpio0 5  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE2 K2 -> P0.05 */
+            , <&gpio0 4  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE3 J1 -> P0.04 */
+            , <&gpio0 27 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE4 H2 -> P0.27 */
+            , <&gpio0 7  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE5 M2 -> P0.07 */
+            , <&gpio1 12 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE6 B17 -> P1.12 */
+            , <&gpio1 14 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> /* SENSE7 B15 -> P1.14 */
             ;
 
         col-gpios
-            = <&gpio1 10 GPIO_ACTIVE_HIGH> /* DRV0 A20 -> P1.10 */
-            , <&gpio1 8  GPIO_ACTIVE_HIGH> /* DRV1 P2  -> P1.08 */
-            , <&gpio1 6  GPIO_ACTIVE_HIGH> /* DRV2 R24 -> P1.06 */
-            , <&gpio1 4  GPIO_ACTIVE_HIGH> /* DRV3 U24 -> P1.04 */
-            , <&gpio1 0  GPIO_ACTIVE_HIGH> /* DRV4 AD22 -> P1.00 */
-            , <&gpio1 1  GPIO_ACTIVE_HIGH> /* DRV5 Y23 -> P1.01 */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV6 V23 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV7 T23 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV8 W24 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV9 R1  -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV10 P23 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV11 B19 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV12 A16 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV13 A14 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV14 B17 -> TODO */
-            , <&gpio0 0  GPIO_ACTIVE_HIGH> /* DRV15 B15 -> TODO */
+            = <&gpio0 13 GPIO_ACTIVE_HIGH> /* DRV0 AD8 -> P0.13 */
+            , <&gpio0 20 GPIO_ACTIVE_HIGH> /* DRV1 AD16 -> P0.20 */
+            , <&gpio0 22 GPIO_ACTIVE_HIGH> /* DRV2 AD18 -> P0.22 */
+            , <&gpio0 24 GPIO_ACTIVE_HIGH> /* DRV3 AD20 -> P0.24 */
+            , <&gpio1 1  GPIO_ACTIVE_HIGH> /* DRV4 Y23 -> P1.01 */
+            , <&gpio0 25 GPIO_ACTIVE_HIGH> /* DRV5 AC21 -> P0.25 */
+            , <&gpio1 0  GPIO_ACTIVE_HIGH> /* DRV6 AD22 -> P1.00 */
+            , <&gpio0 21 GPIO_ACTIVE_HIGH> /* DRV7 AC17 -> P0.21 */
+            , <&gpio0 23 GPIO_ACTIVE_HIGH> /* DRV8 AC19 -> P0.23 */
+            , <&gpio0 16 GPIO_ACTIVE_HIGH> /* DRV9 AC11 -> P0.16 */
+            , <&gpio0 19 GPIO_ACTIVE_HIGH> /* DRV10 AC15 -> P0.19 */
+            , <&gpio0 15 GPIO_ACTIVE_HIGH> /* DRV11 AD10 -> P0.15 */
+            , <&gpio0 14 GPIO_ACTIVE_HIGH> /* DRV12 AC9 -> P0.14 */
+            , <&gpio1 5  GPIO_ACTIVE_HIGH> /* DRV13 T23 -> P1.05 */
+            , <&gpio0 17 GPIO_ACTIVE_HIGH> /* DRV14 AD12 -> P0.17 */
+            , <&gpio1 3  GPIO_ACTIVE_HIGH> /* DRV15 V23 -> P1.03 */
             ;
     };
 
     vbatt: vbatt {
         compatible = "zmk,battery-voltage-divider";
-        io-channels = <&adc 0>; /* TODO: Map U4.A12 to correct SAADC channel */
-        output-ohms = <2000000>;
-        full-ohms = <(2000000 + 806000)>; /* Adjust based on your schematic voltage divider R20/R21 */
+        io-channels = <&adc 0>; /* A12 -> AIN0 (Channel 0) */
+        output-ohms = <100000>;
+        full-ohms = <200000>; /* 50% voltage divider (R20/R21 are 10M/10M or 100R/100R) */
+    };
+
+    leds {
+        compatible = "gpio-leds";
+        caps_lock_led: caps_lock_led {
+            gpios = <&gpio0 31 GPIO_ACTIVE_LOW>; /* A8 -> P0.31 */
+            label = "Caps Lock LED";
+        };
+        power_led: power_led {
+            gpios = <&gpio0 29 GPIO_ACTIVE_LOW>; /* A10 -> P0.29 */
+            label = "Power LED";
+        };
+        mute_led: mute_led {
+            gpios = <&gpio1 15 GPIO_ACTIVE_LOW>; /* A14 -> P1.15 */
+            label = "Mute LED";
+        };
+        mic_mute_led: mic_mute_led {
+            gpios = <&gpio1 7 GPIO_ACTIVE_LOW>; /* P23 -> P1.07 */
+            label = "Mic Mute LED";
+        };
+        bt_led: bt_led {
+            gpios = <&gpio1 2 GPIO_ACTIVE_LOW>; /* W24 -> P1.02 */
+            label = "Bluetooth LED";
+        };
+        bat_led_r: bat_led_r {
+            gpios = <&gpio1 6 GPIO_ACTIVE_LOW>; /* R24 -> P1.06 */
+            label = "Battery Red LED";
+        };
+        bat_led_g: bat_led_g {
+            gpios = <&gpio1 4 GPIO_ACTIVE_LOW>; /* U24 -> P1.04 */
+            label = "Battery Green LED";
+        };
     };
 };
 
