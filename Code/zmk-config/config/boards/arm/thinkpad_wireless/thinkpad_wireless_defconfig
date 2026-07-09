@@ -23,3 +23,6 @@ CONFIG_ZMK_EXT_POWER=y
 
 # Enable ADC for battery voltage measurement
 CONFIG_ADC=y
+
+# Enable Mouse Pointing for TrackPoint
+CONFIG_ZMK_POINTING=y
