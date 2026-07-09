@@ -20,3 +20,6 @@ CONFIG_ZMK_BATTERY_REPORTING=y
 
 # External Power Control (5V Boost)
 CONFIG_ZMK_EXT_POWER=y
+
+# Enable ADC for battery voltage measurement
+CONFIG_ADC=y
