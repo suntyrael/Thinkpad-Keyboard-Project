@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2024 The ZMK Contributors
  * SPDX-License-Identifier: MIT
  */
@@ -119,9 +119,9 @@
         };
     };
 
-    ext_power: ext_power {
+    board_ext_power: ext_power {
         compatible = "zmk,ext-power-generic";
-        label = "EXT_POWER";
+        /* label property removed: deprecated in Zephyr 4.x */
         control-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>; /* 5V_EN -> P0.12 */
         init-delay-ms = <50>;
     };
