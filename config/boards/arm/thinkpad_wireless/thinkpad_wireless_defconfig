@@ -26,3 +26,6 @@ CONFIG_ADC=y
 
 # Enable Mouse Pointing for TrackPoint
 CONFIG_ZMK_POINTING=y
+
+# HID Indicators (Caps Lock LED)
+CONFIG_ZMK_HID_INDICATORS=y
