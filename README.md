@@ -30,51 +30,71 @@
 
 ## 🔌 引脚映射与电路连接
 
-以下是经与 `SCH_Schematic1_2026-07-09.pdf` 原理图核对无误的完整物理管脚映射。
+以下是经原理图 `SCH_Schematic1_2026-07-09.pdf` 最终确认的信号与物理接口引脚映射关系。包含了 `U2` (X220 BTB 键盘座)、`FPC2` (T61 FPC 键盘座) 以及板级信号转接排线 `FPC3` 的管脚对应。
 
 ### 1. 键盘矩阵与外设 GPIO 映射表
 
-| 信号名称 | MCU 引脚 (GPIO) | 芯片物理球位 (Ball) | 连接器引脚 (FPC2/BTB) | 作用与配置说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| **KEY_SENSE0** | `P0.26` | `G1` | Pin 17 | 矩阵行 0 读取，`row-gpios` 分配 |
-| **KEY_SENSE1** | `P0.28` | `B11` | Pin 19 | 矩阵行 1 读取，`row-gpios` 分配 |
-| **KEY_SENSE2** | `P0.05` | `K2` | Pin 22 | 矩阵行 2 读取，`row-gpios` 分配 |
-| **KEY_SENSE3** | `P0.04` | `J1` | Pin 23 | 矩阵行 3 读取，`row-gpios` 分配 |
-| **KEY_SENSE4** | `P0.27` | `H2` | Pin 18 | 矩阵行 4 读取，`row-gpios` 分配 |
-| **KEY_SENSE5** | `P0.07` | `M2` | Pin 21 | 矩阵行 5 读取，`row-gpios` 分配 |
-| **KEY_SENSE6** | `P1.12` | `B17` | Pin 37 | 矩阵行 6 读取，`row-gpios` 分配 |
-| **KEY_SENSE7** | `P1.14` | `B15` | Pin 38 | 矩阵行 7 读取，`row-gpios` 分配 |
-| **KEY_DRV0** | `P0.13` | `AD8` | Pin 6 | 矩阵列 0 驱动，`col-gpios` 分配 |
-| **KEY_DRV1** | `P0.20` | `AD16` | Pin 12 | 矩阵列 1 驱动，`col-gpios` 分配 |
-| **KEY_DRV2** | `P0.22` | `AD18` | Pin 14 | 矩阵列 2 驱动，`col-gpios` 分配 |
-| **KEY_DRV3** | `P0.24` | `AD20` | Pin 16 | 矩阵列 3 驱动，`col-gpios` 分配 |
-| **KEY_DRV4** | `P1.01` | `Y23` | Pin 26 | 矩阵列 4 驱动，`col-gpios` 分配 |
-| **KEY_DRV5** | `P0.25` | `AC21` | Pin 17 | 矩阵列 5 驱动，`col-gpios` 分配 |
-| **KEY_DRV6** | `P1.00` | `AD22` | Pin 25 | 矩阵列 6 驱动，`col-gpios` 分配 |
-| **KEY_DRV7** | `P0.21` | `AC17` | Pin 13 | 矩阵列 7 驱动，`col-gpios` 分配 |
-| **KEY_DRV8** | `P0.23` | `AC19` | Pin 15 | 矩阵列 8 驱动，`col-gpios` 分配 |
-| **KEY_DRV9** | `P0.16` | `AC11` | Pin 9 | 矩阵列 9 驱动，`col-gpios` 分配 |
-| **KEY_DRV10** | `P0.19` | `AC15` | Pin 11 | 矩阵列 10 驱动，`col-gpios` 分配 |
-| **KEY_DRV11** | `P0.15` | `AD10` | Pin 8 | 矩阵列 11 驱动，`col-gpios` 分配 |
-| **KEY_DRV12** | `P0.14` | `AC9` | Pin 7 | 矩阵列 12 驱动，`col-gpios` 分配 |
-| **KEY_DRV13** | `P1.05` | `T23` | Pin 30 | 矩阵列 13 驱动，`col-gpios` 分配 |
-| **KEY_DRV14** | `P0.17` | `AD12` | Pin 10 | 矩阵列 14 驱动，`col-gpios` 分配 |
-| **KEY_DRV15** | `P1.03` | `V23` | Pin 28 | 矩阵列 15 驱动，`col-gpios` 分配 |
-| **TP4CLK** | `P1.13` | `A16` | Pin 3 | 小红帽时钟端，PS/2 接口 |
-| **TP4DATA** | `P1.10` | `A20` | Pin 2 | 小红帽数据端，PS/2 接口 |
-| **TP4_RESET** | `P1.09` | `R1` | Pin 21 | 小红帽复位信号 |
-| **LEDCPSLOCK** | `P0.31` | `A8` | - | 大写锁定 (Caps Lock) 指示灯 (低电平点亮) |
-| **LEDPWR** | `P0.29` | `A10` | - | 电源状态指示灯 (低电平点亮) |
-| **-LED_MUTE** | `P1.15` | `A14` | - | 扬声器静音指示灯 (低电平点亮) |
-| **-LEDMICMUTE_R** | `P1.07` | `P23` | - | 麦克风静音指示灯 (低电平点亮) |
-| **BT_LED** | `P1.02` | `W24` | - | 蓝牙配对与状态指示灯 (低电平点亮) |
-| **BAT_LED_R** | `P1.06` | `R24` | - | 充电指示红灯 (低电平点亮) |
-| **BAT_LED_G** | `P1.04` | `U24` | - | 充满/充电绿灯 (低电平点亮) |
-| **5V_EN** | `P0.12` | `U1` | - | 5V Boost 升压使能端 (高电平开启) |
-| **BAT_ADC** | `P0.02` | `A12` | - | 电池电压采集 (AIN0) |
-| **CHG_INT** | `P0.08` | `N1` | - | 充电状态中断读取 |
-| **-PWRSWITCH** | `P1.11` | `B19` | - | 电源按键输入 (低电平触发) |
-| **-HOTKEY** | `P1.08` | `P2` | - | ThinkVantage 按键输入 (低电平触发) |
+| 信号名称 | MCU引脚 (GPIO) | MCU物理球位 (Ball) | FPC3引脚 (板间排线) | U2引脚 (X220 BTB) | FPC2引脚 (T61 FPC) | 作用与配置说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **KEY_SENSE0** | `P0.26` | `G1` | Pin 17 | Pin 5 | Pin 24 | 矩阵行 0 读取，`row-gpios` 分配 |
+| **KEY_SENSE1** | `P0.28` | `B11` | Pin 13 | Pin 13 | Pin 28 | 矩阵行 1 读取，`row-gpios` 分配 |
+| **KEY_SENSE2** | `P0.05` | `K2` | Pin 15 | Pin 9 | Pin 26 | 矩阵行 2 读取，`row-gpios` 分配 |
+| **KEY_SENSE3** | `P0.04` | `J1` | Pin 16 | Pin 7 | Pin 25 | 矩阵行 3 读取，`row-gpios` 分配 |
+| **KEY_SENSE4** | `P0.27` | `H2` | Pin 14 | Pin 11 | Pin 27 | 矩阵行 4 读取，`row-gpios` 分配 |
+| **KEY_SENSE5** | `P0.07` | `M2` | Pin 18 | Pin 3 | Pin 23 | 矩阵行 5 读取，`row-gpios` 分配 |
+| **KEY_SENSE6** | `P1.12` | `B17` | Pin 11 | Pin 17 | Pin 30 | 矩阵行 6 读取，`row-gpios` 分配 |
+| **KEY_SENSE7** | `P1.14` | `B15` | Pin 12 | Pin 15 | Pin 29 | 矩阵行 7 读取，`row-gpios` 分配 |
+| **KEY_DRV0** | `P0.13` | `AD8` | Pin 30 | Pin 22 | Pin 11 | 矩阵列 0 驱动，`col-gpios` 分配 |
+| **KEY_DRV1** | `P0.20` | `AD16` | Pin 32 | Pin 18 | Pin 9 | 矩阵列 1 驱动，`col-gpios` 分配 |
+| **KEY_DRV2** | `P0.22` | `AD18` | Pin 34 | Pin 14 | Pin 7 | 矩阵列 2 驱动，`col-gpios` 分配 |
+| **KEY_DRV3** | `P0.24` | `AD20` | Pin 36 | Pin 10 | Pin 5 | 矩阵列 3 驱动，`col-gpios` 分配 |
+| **KEY_DRV4** | `P1.01` | `Y23` | Pin 40 | Pin 2 | Pin 1 | 矩阵列 4 驱动，`col-gpios` 分配 |
+| **KEY_DRV5** | `P0.25` | `AC21` | Pin 39 | Pin 4 | Pin 2 | 矩阵列 5 驱动，`col-gpios` 分配 |
+| **KEY_DRV6** | `P1.00` | `AD22` | Pin 37 | Pin 8 | Pin 4 | 矩阵列 6 驱动，`col-gpios` 分配 |
+| **KEY_DRV7** | `P0.21` | `AC17` | Pin 35 | Pin 12 | Pin 6 | 矩阵列 7 驱动，`col-gpios` 分配 |
+| **KEY_DRV8** | `P0.23` | `AC19` | Pin 38 | Pin 6 | Pin 3 | 矩阵列 8 驱动，`col-gpios` 分配 |
+| **KEY_DRV9** | `P0.16` | `AC11` | Pin 31 | Pin 20 | Pin 10 | 矩阵列 9 驱动，`col-gpios` 分配 |
+| **KEY_DRV10** | `P0.19` | `AC15` | Pin 33 | Pin 16 | Pin 8 | 矩阵列 10 驱动，`col-gpios` 分配 |
+| **KEY_DRV11** | `P0.15` | `AD10` | Pin 29 | Pin 24 | Pin 12 | 矩阵列 11 驱动，`col-gpios` 分配 |
+| **KEY_DRV12** | `P0.14` | `AC9` | Pin 27 | Pin 28 | Pin 14 | 矩阵列 12 驱动，`col-gpios` 分配 |
+| **KEY_DRV13** | `P1.05` | `T23` | Pin 25 | Pin 32 | Pin 16 | 矩阵列 13 驱动，`col-gpios` 分配 |
+| **KEY_DRV14** | `P0.17` | `AD12` | Pin 28 | Pin 26 | Pin 13 | 矩阵列 14 驱动，`col-gpios` 分配 |
+| **KEY_DRV15** | `P1.03` | `V23` | Pin 26 | Pin 30 | Pin 15 | 矩阵列 15 驱动，`col-gpios` 分配 |
+| **TP4CLK** | `P1.13` | `A16` | Pin 3 | Pin 39 | Pin 38 | 小红帽时钟端，PS/2 接口 |
+| **TP4DATA** | `P1.10` | `A20` | Pin 2 | Pin 37 | Pin 39 | 小红帽数据端，PS/2 接口 |
+| **TP4_RESET** | `P1.09` | `R1` | Pin 21 | Pin 40 (via R15) | Pin 20 | 小红帽复位信号 |
+| **LEDCPSLOCK** | `P0.31` | `A8` | Pin 9 | Pin 21 (via R18) | Pin 32 | 大写锁定 (Caps Lock) 指示灯 (低电平点亮) |
+| **LEDPWR** | `P0.29` | `A10` | Pin 8 | Pin 23 (via R19) | Pin 33 | 电源状态指示灯 (低电平点亮) |
+| **-LED_MUTE** | `P1.15` | `A14` | Pin 7 | Pin 33 (via R17) | Pin 34 | 扬声器静音指示灯 (低电平点亮) |
+| **-LEDMICMUTE_R** | `P1.07` | `P23` | Pin 23 | Pin 36 (via R16) | Pin 18 | 麦克风静音指示灯 (低电平点亮) |
+| **BT_LED** | `P1.02` | `W24` | - | - | - | 蓝牙配对与状态指示灯 (低电平点亮) |
+| **BAT_LED_R** | `P1.06` | `R24` | - | - | - | 充电指示红灯 (低电平点亮) |
+| **BAT_LED_G** | `P1.04` | `U24` | - | - | - | 充满/充电绿灯 (低电平点亮) |
+| **5V_EN** | `P0.12` | `U1` | - | - | - | 5V Boost 升压使能端 (高电平开启) |
+| **BAT_ADC** | `P0.02` | `A12` | - | - | - | 电池电压采集 (AIN0) |
+| **CHG_INT** | `P0.08` | `N1` | - | - | - | 充电状态中断读取 |
+| **-PWRSWITCH** | `P1.11` | `B19` | Pin 10 | Pin 19 | Pin 31 | 电源按键输入 (低电平触发) |
+| **-HOTKEY** | `P1.08` | `P2` | Pin 19 | Pin 1 | Pin 22 | ThinkVantage 按键输入 (低电平触发) |
+| **VDD3V3** | - | - | Pin 5, 22 | Pin 35, 38 | Pin 19, 36 | 3.3V 系统电源供电 |
+| **GND** | - | - | Pin 1, 4, 6, 20, 24, 41, 42 | Pin 31, 34, 41-44 | Pin 17, 21, 35, 37, 40-42 | 公共接地端 |
+
+---
+
+## 📦 核心元器件选型总结
+
+1.  **主控 MCU**：`nRF52840-QIAA-R0` (aQFN73 封装)。支持蓝牙 5.4 和 USB 2.0，提供 48 个 GPIO。配置为 Normal Voltage 模式，短接 VDDH 与 VDD，关闭内部高电压调节器 (REG0)。
+2.  **稳压 LDO**：`RT9080-33GJ5` (或 SGM2036-3.3)，TSOT-23-5 封装。超低静态电流 **Iq = 2µA**，最大持续输出电流 **600mA**，低压差 (dropout)，完美契合低功耗无线设计。
+3.  **锂电池充电芯片**：`TP4054-42-SOT25R` (SOT-25-5 封装)，线性充电芯片。PROG 电阻配合为 **2k ohm**，设定 500mA 恒流充电（不可使用不匹配的 51k ohm 电阻）。
+4.  **5V Boost 升压芯片**：`ETA1061V50S2G` (SOT-23-6 封装)，高效同步整流 DC-DC 升压芯片。提供 5.0V 稳定输出（兼容 5V 小红帽和 T61 键盘供电）。具备超低静态电流与 **True Shutdown (真关断)** 功能，在 EN 拉低时完全阻断并隔离负载与输入，避免产生静态漏电。
+5.  **ESD 接口保护**：`PESD5V0U2BT,215` (SOT-23 封装)，用于 USB 数据线及小红帽 PS/2 数据线防静电保护。
+6.  **时钟晶振**：
+    *   高频外部无源晶振：`32MHz`（封装 2520，精度 $\pm$10ppm）。
+    *   低频外部无源晶振：`32.768kHz`（封装 3215，精度 $\pm$20ppm）。
+7.  **物理连接器接口**：
+    *   **U2 (X220 BTB Receptacle)**：`Molex 54363-0489` (40-Pin 双排 BTB 母座，另含 4 个屏蔽脚 41-44)。
+    *   **FPC2 (T61 FPC Receptacle)**：`AFC01-S40FCA-00` (40-Pin FPC 插座，0.5mm 间距，下接插类型)。
+    *   **FPC3 (板级连接器)**：`AFC01-S40FCA-00` (40-Pin FPC 插座)。
+    *   **USB 接口**：16-pin Type-C 母座，CC1 与 CC2 必须各自接 **5.1k ohm** 下拉电阻到 GND 以兼容 C-to-C 握手。
 
 ---
 
