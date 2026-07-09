@@ -1,0 +1,11 @@
+# Windows temporary files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Office temporary files
+~$*
+
+# General temporary files
+*.tmp
+*.log
