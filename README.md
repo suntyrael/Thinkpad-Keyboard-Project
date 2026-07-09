@@ -34,7 +34,7 @@
 
 ### 1. 键盘矩阵与外设 GPIO 映射表
 
-| 信号名称 | MCU引脚 (GPIO) | MCU物理球位 (Ball) | FPC3引脚 (板间排线) | U2引脚 (X220 BTB) | FPC2引脚 (T61 FPC) | 作用与配置说明 |
+| 信号名称 | MCU引脚 (GPIO) | MCU物理球位 (Ball) | FPC3引脚 (主控板端) | U2引脚 (X220 BTB) | FPC2引脚 (转接板端) | 作用与配置说明 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **KEY_SENSE0** | `P0.26` | `G1` | Pin 17 | Pin 5 | Pin 24 | 矩阵行 0 读取，`row-gpios` 分配 |
 | **KEY_SENSE1** | `P0.28` | `B11` | Pin 13 | Pin 13 | Pin 28 | 矩阵行 1 读取，`row-gpios` 分配 |
@@ -75,8 +75,8 @@
 | **CHG_INT** | `P0.08` | `N1` | - | - | - | 充电状态中断读取 |
 | **-PWRSWITCH** | `P1.11` | `B19` | Pin 10 | Pin 19 | Pin 31 | 电源按键输入 (低电平触发) |
 | **-HOTKEY** | `P1.08` | `P2` | Pin 19 | Pin 1 | Pin 22 | ThinkVantage 按键输入 (低电平触发) |
-| **VDD3V3** | - | - | Pin 5 | Pin 35 | Pin 36 | 3.3V 系统电源供电网络 |
-| **VDD3V3/5V (Selectable)** | - | - | Pin 22 | Pin 38 | Pin 19 | 可选系统主电源（由 R22 (0R) 选 5V，R23 (NC) 选 3.3V） |
+| **VDD3V3** | - | - | Pin 5 | Pin 36 | Pin 35 | 3.3V 系统电源供电网络 |
+| **VDD3V3/5V (Selectable)** | - | - | Pin 22 | Pin 19 | Pin 38 | 可选系统主电源（由 R22 (0R) 选 5V，R23 (NC) 选 3.3V） |
 | **GND** | - | - | Pin 1, 4, 6, 20, 24, 41, 42 | Pin 31, 34, 41-44 | Pin 17, 21, 35, 37, 40-42 | 公共接地端 |
 
 ---
