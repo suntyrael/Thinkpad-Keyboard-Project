@@ -42,11 +42,13 @@ void status_led_thread(void *dummy1, void *dummy2, void *dummy3)
         return;
     }
 
-    /* Configure LED output pins - GPIO_OUTPUT_INACTIVE respects the active-level
-     * property so the LED is physically OFF regardless of active-high/low polarity. */
-    gpio_pin_configure(BT_LED_PORT,    BT_LED_PIN,    GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(BAT_LED_R_PORT, BAT_LED_R_PIN, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(BAT_LED_G_PORT, BAT_LED_G_PIN, GPIO_OUTPUT_INACTIVE);
+    /* Configure LED output pins as OUTPUT_HIGH.
+     * Our LEDs are active-LOW (hardware), so physical HIGH = LED OFF at init.
+     * We do NOT pass GPIO_ACTIVE_LOW here because LED_ON/LED_OFF macros use raw
+     * physical values (0=LOW=ON, 1=HIGH=OFF) without polarity abstraction. */
+    gpio_pin_configure(BT_LED_PORT,    BT_LED_PIN,    GPIO_OUTPUT_HIGH);   /* HIGH = LED OFF (active-LOW hw) */
+    gpio_pin_configure(BAT_LED_R_PORT, BAT_LED_R_PIN, GPIO_OUTPUT_HIGH);   /* HIGH = LED OFF (active-LOW hw) */
+    gpio_pin_configure(BAT_LED_G_PORT, BAT_LED_G_PIN, GPIO_OUTPUT_HIGH);   /* HIGH = LED OFF (active-LOW hw) */
 
     /* Configure charger interrupt as input with pull-up */
     gpio_pin_configure(CHG_INT_PORT, CHG_INT_PIN, GPIO_INPUT | GPIO_PULL_UP);
