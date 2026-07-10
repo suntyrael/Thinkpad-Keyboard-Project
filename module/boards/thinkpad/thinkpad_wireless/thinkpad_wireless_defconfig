@@ -1,4 +1,4 @@
-﻿# Copyright (c) 2024 The ZMK Contributors
+# Copyright (c) 2024 The ZMK Contributors
 # SPDX-License-Identifier: MIT
 #
 # thinkpad_wireless_defconfig: Hardware-level Kconfig for the thinkpad_wireless board.

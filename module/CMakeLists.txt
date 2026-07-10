@@ -1,4 +1,4 @@
-﻿# Copyright (c) 2024 The ZMK Contributors
+# Copyright (c) 2024 The ZMK Contributors
 # SPDX-License-Identifier: MIT
 #
 # CMakeLists.txt for the thinkpad-wireless PS/2 TrackPoint module.

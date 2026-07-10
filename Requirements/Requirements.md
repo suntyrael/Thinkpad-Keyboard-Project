@@ -1,4 +1,4 @@
-﻿# ThinkPad Wireless Keyboard - 项目需求与规格定义说明书
+# ThinkPad Wireless Keyboard - 项目需求与规格定义说明书
 
 本项目旨在将 **ThinkPad X220 / T420** 键盘（经典 7 行键盘，使用 40-pin BTB 接口）和 **T61** 键盘（40-pin FPC 接口）通过适配电路，改造为**有线 USB / 蓝牙双模无线键盘**。主控采用 **nRF52840-QIAA-R0**，固件基于 **ZMK Firmware**。
 
