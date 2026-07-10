@@ -5,6 +5,13 @@ config BOARD_THINKPAD_WIRELESS
     bool "Thinkpad Wireless Keyboard"
     select SOC_NRF52840_QIAA
 
+# Compatible definitions for Kconfig preprocessor to avoid comma argument splitting
+DT_COMPAT_ZMK_INPUT_MOUSE_PS2 := zmk,input-mouse-ps2
+DT_COMPAT_ZMK_INPUT_LISTENER_PS2 := zmk,input-listener-ps2
+DT_COMPAT_ZMK_BEHAVIOR_MOUSE_SETTING := zmk,behavior-mouse-setting
+DT_COMPAT_PS2_GPIO := gpio-ps2
+DT_COMPAT_PS2_UART := uart-ps2
+
 # TrackPoint PS/2 Driver Configurations
 config PS2
     bool
@@ -16,23 +23,23 @@ config ZMK_INPUT_MOUSE_PS2
     select ZMK_POINTING
     select ZMK_POINTING_SMOOTH_SCROLLING
     select PS2
-    default y if $(dt_compat_enabled,zmk,input-mouse-ps2)
+    default y if $(dt_compat_enabled,$(DT_COMPAT_ZMK_INPUT_MOUSE_PS2))
 
 config ZMK_INPUT_LISTENER_PS2
     bool "Enable PS/2 mouse input listener"
-    default y if $(dt_compat_enabled,zmk,input-listener)
+    default y if $(dt_compat_enabled,$(DT_COMPAT_ZMK_INPUT_LISTENER_PS2))
 
 config ZMK_BEHAVIOR_MOUSE_SETTING
     bool "Enable mouse setting behaviors"
-    default y if ZMK_INPUT_MOUSE_PS2 && $(dt_compat_enabled,zmk,behavior-mouse-setting)
+    default y if ZMK_INPUT_MOUSE_PS2 && $(dt_compat_enabled,$(DT_COMPAT_ZMK_BEHAVIOR_MOUSE_SETTING))
 
 config PS2_GPIO
     bool "GPIO bit banging PS/2 support"
-    default y if $(dt_compat_enabled,gpio-ps2)
+    default y if $(dt_compat_enabled,$(DT_COMPAT_PS2_GPIO))
 
 config PS2_UART
     bool "GPIO bit banging PS/2 support through UART"
-    default y if $(dt_compat_enabled,uart-ps2)
+    default y if $(dt_compat_enabled,$(DT_COMPAT_PS2_UART))
     select SERIAL
     select UART_ASYNC_API
     select UART_USE_RUNTIME_CONFIGURE
