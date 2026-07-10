@@ -3,6 +3,10 @@
 
 zephyr_library()
 
+# Include ZMK application headers
+zephyr_include_directories(${CMAKE_SOURCE_DIR}/include)
+zephyr_include_directories(${CMAKE_SOURCE_DIR}/module/include)
+
 zephyr_library_sources_ifdef(CONFIG_BOARD_THINKPAD_WIRELESS board.c)
 zephyr_library_sources_ifdef(CONFIG_BOARD_THINKPAD_WIRELESS status_leds.c)
 
