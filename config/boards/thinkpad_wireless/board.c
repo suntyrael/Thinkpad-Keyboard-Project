@@ -24,7 +24,7 @@ static const struct device *gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
  * This must run early (PRE_KERNEL_2) so that pins are in a defined
  * state before the ZMK application layer starts.
  */
-static int board_gpio_init(const struct device *dev)
+static int board_gpio_init(void)
 {
     if (!device_is_ready(gpio0_dev) || !device_is_ready(gpio1_dev)) {
         return -ENODEV;

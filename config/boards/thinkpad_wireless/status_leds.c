@@ -22,7 +22,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/sys/poweroff.h>
-#include <hal/nrf_power.h>
+#include <zmk/usb.h>
 
 #include <zmk/event_manager.h>
 #include <zmk/events/ble_active_profile_changed.h>
@@ -81,7 +81,11 @@ static void led_thread_fn(void *a, void *b, void *c)
     while (1) {
         /* ---- Battery Critical Shutdown (<3.4V / <2% SoC) ---- */
         /* Use Nordic HAL for VBUS detection (safe, no raw register access) */
-        bool vbus_present = nrf_power_usbdetected_get(NRF_POWER);
+        #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
+        bool vbus_present = zmk_usb_is_powered();
+#else
+        bool vbus_present = false;
+#endif
 
         if (battery_soc < 2 && !vbus_present) {
             /* Flash Red LED 5x rapidly */
@@ -197,7 +201,7 @@ ZMK_SUBSCRIPTION(status_leds_bat, zmk_battery_state_changed);
  * Module init: start the LED worker thread.
  * This runs at APPLICATION level, after ZMK subsystems are ready.
  * -------------------------------------------------------------------------- */
-static int status_leds_init(const struct device *dev)
+static int status_leds_init(void)
 {
     if (!device_is_ready(gpio0_dev) || !device_is_ready(gpio1_dev)) {
         return -ENODEV;
