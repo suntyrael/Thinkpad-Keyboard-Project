@@ -73,7 +73,7 @@
         direct {
             kscan = <&direct_kscan>;
             row-offset = <8>;
-            column-offset = <0>;
+            col-offset = <0>;
         };
     };
 
@@ -246,5 +246,9 @@
 };
 
 &gpiote {
+    status = "okay";
+};
+
+&adc {
     status = "okay";
 };

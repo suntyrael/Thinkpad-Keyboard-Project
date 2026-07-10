@@ -7,6 +7,7 @@
 
 # Enable ADC for battery voltage measurement (hardware requirement)
 CONFIG_ADC=y
+CONFIG_ADC_NRFX_SAADC=y
 
 # Enable PWM for breathing power LED (hardware requirement)
 CONFIG_PWM=y
