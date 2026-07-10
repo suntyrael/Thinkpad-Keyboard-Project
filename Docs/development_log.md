@@ -76,3 +76,6 @@
 3.  **矩阵解密**：依照 `thinkpad-ec` 的 scancode 定义，重构 `default_transform`，使 X220 物理按键与 ZMK Keymap 完全映射对齐，补全了顶部音量与多媒体按键。
 4.  **呼吸灯**：使用 PWM0 硬件模块驱动 P0.29，实现具有呼吸拟真质感的电源指示灯。
 5.  **电池与安全**：补充开机/唤醒电量展示及低电量 5 次红灯闪烁闪警，并实现 <3.4V 强制 System OFF 极低功耗关机保护。
+
+### [2026-07-10] v1.0.1 — 修复编译环境下的 UTF-8 BOM 冲突
+1. **移除 BOM 字节**：检测到由 Windows 环境写入的 UTF-8 BOM 头（`\xef\xbb\xbf`）会导致 Linux 编译环境下的 Kconfig、yaml 编译器报错退出。对整个项目配置（`defconfig`、`west.yml`、`build.yaml`、`board.c`、`CMakeLists.txt`）进行了无损 BOM 头清除，保证编译顺利通过。
