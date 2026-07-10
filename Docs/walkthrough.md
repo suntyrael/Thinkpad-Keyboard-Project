@@ -1,6 +1,6 @@
 # Walkthrough - thinkpad_wireless Board HWMv2 Migration & Build Fixes
 
-This walkthrough details the structural changes, config updates, encoding corrections, name shortening, and ADC node enablement applied to migrate the custom `thinkpad_wireless` board to Hardware Model v2 (HWMv2) under the ZMK `main` branch.
+This walkthrough details the structural changes, config updates, encoding corrections, name shortening, ADC node enablement, and CMake include path adjustments applied to migrate the custom `thinkpad_wireless` board to Hardware Model v2 (HWMv2) under the ZMK `main` branch.
 
 ## Changes Made
 
@@ -13,7 +13,8 @@ This walkthrough details the structural changes, config updates, encoding correc
 - Renamed the board Kconfig definition file from `Kconfig.board` to `Kconfig.thinkpad_wireless` (now located at `module/boards/thinkpad/thinkpad_wireless/Kconfig.thinkpad_wireless`).
 
 ### 3. Build & Code Integration Refinement
-- **[CMakeLists.txt](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/CMakeLists.txt)**: Updated the relative header inclusion path from `../../include` to `../../../include` to resolve ZMK application header resolution errors under the newly nested vendor directory level.
+- **[CMakeLists.txt (board level)](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/CMakeLists.txt)**: Updated the relative header inclusion path from `../../include` to `../../../include` to resolve ZMK application header resolution errors under the newly nested vendor directory level.
+- **[CMakeLists.txt (module level)](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/CMakeLists.txt)**: Added `zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)` to expose ZMK's core application headers to the driver and input listener source files (e.g., `input_listener_ps2.c`). Without this, compiler errors occurred due to unresolved includes like `<zmk/endpoints.h>`.
 - **[thinkpad_wireless.conf](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/config/thinkpad_wireless.conf)**:
   - Updated file path reference comments to the new nested directory structure.
   - Shortened `CONFIG_ZMK_KEYBOARD_NAME` from `"Thinkpad Wireless"` to `"ThinkpadWireless"` to satisfy ZMK's static assertion constraint (BLE local name max length limit: 16).
@@ -37,7 +38,7 @@ This walkthrough details the structural changes, config updates, encoding correc
   - `module/Kconfig`
   - `Requirements/Requirements.md`
 - **[development_log.md](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/Docs/development_log.md)**:
-  - Updated the log with v1.0.14 changelog entries to document the new ADC enablement fix and the composite column-offset deprecation resolution.
+  - Updated the log with v1.0.14 and v1.0.15 changelog entries.
 
 ---
 
@@ -46,3 +47,4 @@ This walkthrough details the structural changes, config updates, encoding correc
 - **BOM Cleanliness Verification**: Verified that all source and config files in `module/` and `config/` are now free of BOM bytes.
 - **Directory Layout Verification**: Confirmed that the new layout follows HWMv2 requirements.
 - **DTS and Kconfig Dependency Verification**: Confirmed that the ADC node is now enabled, ensuring that the SAADC driver is correctly built and mapped to the battery sensor.
+- **Header Resolution Verification**: Confirmed that driver files under `module/` now have proper access to application include paths during compilation.

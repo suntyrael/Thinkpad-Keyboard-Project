@@ -8,6 +8,7 @@
 zephyr_library()
 
 # Include the module's public headers
+zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)
 zephyr_library_include_directories(include)
 
 # PS/2 transport layer drivers

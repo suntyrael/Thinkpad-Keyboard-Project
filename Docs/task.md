@@ -1,10 +1,11 @@
-# HWMv2 Migration & BOM / BLE Name / ADC Enablement Tasks
+# HWMv2 Migration & BOM / BLE Name / ADC Enablement / CMake Include Tasks
 
 - `[x]` Modify `config/west.yml` to set `revision` to `main`
 - `[x]` Modify `zephyr/module.yml` to register `board_root: module` and add Twister `boards` list
 - `[x]` Relocate board files to `module/boards/thinkpad/thinkpad_wireless/`
 - `[x]` Rename `Kconfig.board` to `Kconfig.thinkpad_wireless` in the board directory
 - `[x]` Update relative path in `module/boards/thinkpad/thinkpad_wireless/CMakeLists.txt` to `../../../include`
+- `[x]` Add `zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)` in `module/CMakeLists.txt` to solve the module-level driver compilation error (missing ZMK application headers)
 - `[x]` Update comments in `config/thinkpad_wireless.conf` pointing to the old path
 - `[x]` Add `push` and `pull_request` path-based triggers to `.github/workflows/build.yml`
 - `[x]` Scan all files in the repository and strip UTF-8 BOM bytes (`0xEF, 0xBB, 0xBF`)
@@ -14,5 +15,5 @@
 - `[x]` Explicitly enable `CONFIG_ADC_NRFX_SAADC=y` in `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig`
 - `[x]` Rename deprecated `column-offset` to `col-offset` inside the composite kscan node in `thinkpad_wireless.dts`
 - `[x]` Add "Coding Constraints" section in `Docs/development_log.md` (covering BOM restriction, LF format, and BLE/GAP name length limits)
-- `[x]` Add `v1.0.12`, `v1.0.13`, and `v1.0.14` changelog entries in `Docs/development_log.md`
+- `[x]` Add `v1.0.12`, `v1.0.13`, `v1.0.14`, and `v1.0.15` changelog entries in `Docs/development_log.md`
 - `[x]` Push all changes to GitHub branch `zmk-official-hwmv2-fix`

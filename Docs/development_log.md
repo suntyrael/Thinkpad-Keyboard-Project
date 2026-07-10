@@ -167,3 +167,7 @@
 1. **显式启用 ADC 外设节点**：在 `thinkpad_wireless.dts` 设备树中显式追加并启用了 `&adc` 节点（`status = "okay"`）。在 Zephyr 4.x 构建下，由于默认 `nrf52840.dtsi` 中 `adc` 状态为 `"disabled"`，且未定义启用该节点，导致 ZMK 的 `battery_voltage_divider.c` 无法探测到有效的 ADC 设备而触发 `#error Unsupported ADC` 错误。使能该节点后成功生成 `DT_HAS_NORDIC_NRF_SAADC_ENABLED` 符号并恢复正常编译。
 2. **显式指定 SAADC 驱动**：在 `thinkpad_wireless_defconfig` 中显式指定 `CONFIG_ADC_NRFX_SAADC=y` 以对齐底层 Nordic 外设驱动依赖。
 3. **消除 Devicetree 警告**：将 `thinkpad_wireless.dts` 中 `kscan_composite` 复合扫描节点下的已废弃属性 `column-offset` 变更为符合新版规范的 `col-offset`，消除了 `'column-offset' is marked as deprecated` 的编译警告。
+
+
+### [2026-07-10] v1.0.15 — 解决自定义模块无法继承 ZMK 应用头文件路径的编译报错
+1. **添加应用头文件路径**：在 `module/CMakeLists.txt` 中显式追加了 `zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)` 包含路径。自定义模块（`module` 静态库 target）在编译外设驱动与输入监听器（如 `input_listener_ps2.c`）时，由于作用域隔离默认无法访问 ZMK 的应用级头文件，引发无法找到 `<zmk/endpoints.h>` 和 `<zmk/event_manager.h>` 等核心头文件的报错。引入该路径后成功解决了头文件包含失败的问题。
