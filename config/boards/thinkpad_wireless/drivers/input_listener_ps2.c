@@ -341,9 +341,9 @@ static int zmk_input_listener_ps2_layer_toggle_init(const struct input_listener_
                     .layer_toggle_layer_enabled = false,                                           \
                     .layer_toggle_last_mouse_package_time = 0,                                     \
                 };                                                                                 \
-            void input_handler_ps2_##n(struct input_event *evt) {                                      \
+            void input_handler_ps2_##n(struct input_event *evt, void *user_data) {                                      \
                 input_handler_ps2(&config_##n, &data_##n, evt);                                        \
-            } INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_INST_PHANDLE(n, device)), input_handler_ps2_##n); \
+            } INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_INST_PHANDLE(n, device)), input_handler_ps2_##n, NULL); \
                                                                                                    \
             static int zmk_input_listener_ps2_init_##n(const struct device *dev) {                     \
                 struct input_listener_ps2_data *data = dev->data;                                      \
