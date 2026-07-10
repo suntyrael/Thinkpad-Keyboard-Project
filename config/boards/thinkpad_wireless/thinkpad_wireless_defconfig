@@ -1,44 +1,19 @@
-# Copyright (c) 2024 The ZMK Contributors
+﻿# Copyright (c) 2024 The ZMK Contributors
 # SPDX-License-Identifier: MIT
+#
+# thinkpad_wireless_defconfig: Hardware-level Kconfig for the thinkpad_wireless board.
+# This file sets hardware-specific options that are always required for this board.
+# User preferences (BLE name, sleep timeouts, features) are in config/thinkpad_wireless.conf.
 
-
-# Enable ZMK
-
-# Enable Bluetooth
-CONFIG_ZMK_BLE=y
-
-# Power Management
-CONFIG_ZMK_SLEEP=y
-CONFIG_ZMK_IDLE_SLEEP_TIMEOUT=900000
-
-# Battery
-CONFIG_ZMK_BATTERY_REPORTING=y
-
-# External Power Control (5V Boost)
-CONFIG_ZMK_EXT_POWER=y
-
-# Enable ADC for battery voltage measurement
+# Enable ADC for battery voltage measurement (hardware requirement)
 CONFIG_ADC=y
 
-# Enable Mouse Pointing for TrackPoint
-CONFIG_ZMK_POINTING=y
-
-# HID Indicators (Caps Lock LED)
-CONFIG_ZMK_HID_INDICATORS=y
-
-# Enable PWM for breathing power LED
+# Enable PWM for breathing power LED (hardware requirement)
 CONFIG_PWM=y
 
-# Enable poweroff subsystem
-CONFIG_POWEROFF=y
-
-# PS2 & Bluetooth Controller Tuning for TrackPoint
+# PS/2 & Bluetooth Controller Tuning for TrackPoint coexistence
 CONFIG_PM_DEVICE=y
 CONFIG_BT_CTLR_ADVANCED_FEATURES=y
 CONFIG_BT_CTLR_LLL_PRIO=1
 CONFIG_BT_CTLR_ULL_HIGH_PRIO=2
 CONFIG_BT_CTLR_ULL_LOW_PRIO=2
-
-# Bluetooth Name Fix
-CONFIG_ZMK_KEYBOARD_NAME="Thinkpad Wireless"
-CONFIG_BT_DEVICE_NAME_MAX=32

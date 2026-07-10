@@ -1,10 +1,14 @@
-# Copyright (c) 2024 The ZMK Contributors
+﻿# Copyright (c) 2024 The ZMK Contributors
 # SPDX-License-Identifier: MIT
+#
+# Kconfig.defconfig: Hardware-level defaults for the thinkpad_wireless board.
+# User preferences (keyboard name, sleep timeouts, etc.) go in
+# config/thinkpad_wireless.conf instead.
 
 if BOARD_THINKPAD_WIRELESS
 
-# Name must be 16 characters or less
-config ZMK_KEYBOARD_NAME
-    default "ThinkpadWireless"
+# nRF52840 hardware requires these for proper operation
+config BT_DEVICE_NAME_MAX
+    default 32
 
 endif # BOARD_THINKPAD_WIRELESS
