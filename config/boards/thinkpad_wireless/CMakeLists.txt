@@ -1,7 +1,16 @@
-#
 # Copyright (c) 2024 The ZMK Contributors
 # SPDX-License-Identifier: MIT
-#
 
-zephyr_sources(board.c)
-zephyr_sources_ifdef(CONFIG_ZMK_BLE status_leds.c)
+zephyr_library()
+
+zephyr_library_sources_ifdef(CONFIG_BOARD_THINKPAD_WIRELESS board.c)
+zephyr_library_sources_ifdef(CONFIG_BOARD_THINKPAD_WIRELESS status_leds.c)
+
+# TrackPoint driver compilation
+zephyr_include_directories(include)
+
+zephyr_library_sources_ifdef(CONFIG_PS2_GPIO drivers/ps2_gpio.c)
+zephyr_library_sources_ifdef(CONFIG_PS2_UART drivers/ps2_uart.c)
+zephyr_library_sources_ifdef(CONFIG_ZMK_INPUT_MOUSE_PS2 drivers/input_mouse_ps2.c)
+zephyr_library_sources_ifdef(CONFIG_ZMK_INPUT_LISTENER_PS2 drivers/input_listener_ps2.c)
+zephyr_library_sources_ifdef(CONFIG_ZMK_BEHAVIOR_MOUSE_SETTING drivers/behavior_mouse_setting.c)

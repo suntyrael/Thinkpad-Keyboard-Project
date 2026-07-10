@@ -1,16 +1,9 @@
 manifest:
   remotes:
-    - name: tails-dev
-      url-base: https://github.com/tails-dev
     - name: zmkfirmware
       url-base: https://github.com/zmkfirmware
   projects:
-    - name: kb_zmk_ps2_mouse_trackpoint_driver
-      remote: tails-dev
-      revision: main
     - name: zmk
       remote: zmkfirmware
       revision: main
       import: app/west.yml
-  self:
-    path: config
