@@ -93,3 +93,7 @@
 
 ### [2026-07-10] v1.0.4 — 解决板级库与 ZMK 应用头文件的 CMake 作用域冲突
 1. **引入应用头文件路径**：由于驱动文件和 `status_leds.c` 均被归并到了 Zephyr 板级库（`board` 静态库 target）中编译，而板级目标默认无法继承 ZMK 应用目标（`app` target）的头文件包含路径。我们在板级 `CMakeLists.txt` 中通过 `zephyr_include_directories(${CMAKE_SOURCE_DIR}/include)` 和 `${CMAKE_SOURCE_DIR}/module/include` 显式引入了 ZMK 核心头文件路径，解决了 `<zmk/endpoints.h>` 和 `<zmk/event_manager.h>` 等头文件找不到的编译报错。
+
+### [2026-07-10] v1.0.5 — 重构板级 CMake 与 Kconfig 配置规范
+1. **作用域精细控制**：将 `CMakeLists.txt` 中的全局 `zephyr_include_directories` 变更为局域 `zephyr_library_include_directories`，确保 ZMK 头文件包含路径严格隔离在板级库内部，防范多项目编译时的符号冲突和包含污染。
+2. **Kconfig 净化**：移除了板级 `Kconfig.thinkpad_wireless` 中对 `config PS2` 的重复定义，以及对 `PM_DEVICE`、`BT_CTLR_ADVANCED_FEATURES` 等内核级全局符号的覆盖声明。相关配置开关已全部挪移至规范的 `thinkpad_wireless_defconfig` 中，彻底消除了 Kconfig 重定义隐患。
