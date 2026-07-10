@@ -116,3 +116,6 @@
 
 ### [2026-07-10] v1.0.10 — 修复蓝牙名称超出系统限制的断言错误
 1. **放宽最大名称长度限制并设定蓝牙名称**：由于默认 `CONFIG_BT_DEVICE_NAME_MAX`（通常为 28）无法容纳过长的默认键盘设备名，触发了 Zephyr 主机蓝牙子系统的 `BUILD_ASSERT` 静态断言。已在 `thinkpad_wireless_defconfig` 中明确设定 `CONFIG_ZMK_KEYBOARD_NAME="Thinkpad Wireless"`，并将其最大长度配置 `CONFIG_BT_DEVICE_NAME_MAX` 放宽至 `32`，双管齐下彻底解决该编译断言失败问题。
+
+### [2026-07-10] v1.0.11 — 修复 GPIOTE 断言错误
+1. **显式启用 gpiote 节点**：在 Zephyr 4.x/nrfx 的新版校验规则下，如果 GPIO 端口配置了中断触发支持，就必须确保底层的 `gpiote` 实例处于激活状态。因默认设备树中该节点未默认开启，导致了 `gpio_nrfx.c` 触发 `BUILD_ASSERT` 编译失败。我们在 `thinkpad_wireless.dts` 的尾部追加了 `&gpiote { status = "okay"; };`，显式激活该模块，彻底解决此静态断言错误。
