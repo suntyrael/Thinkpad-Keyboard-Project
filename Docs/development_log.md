@@ -97,3 +97,6 @@
 ### [2026-07-10] v1.0.5 — 重构板级 CMake 与 Kconfig 配置规范
 1. **作用域精细控制**：将 `CMakeLists.txt` 中的全局 `zephyr_include_directories` 变更为局域 `zephyr_library_include_directories`，确保 ZMK 头文件包含路径严格隔离在板级库内部，防范多项目编译时的符号冲突和包含污染。
 2. **Kconfig 净化**：移除了板级 `Kconfig.thinkpad_wireless` 中对 `config PS2` 的重复定义，以及对 `PM_DEVICE`、`BT_CTLR_ADVANCED_FEATURES` 等内核级全局符号的覆盖声明。相关配置开关已全部挪移至规范的 `thinkpad_wireless_defconfig` 中，彻底消除了 Kconfig 重定义隐患。
+
+### [2026-07-10] v1.0.6 — 调整 GitHub Actions 为手动编译触发
+1. **修改触发机制**：为了避免频繁 Push 代码导致频繁触发 GitHub Actions 云端编译，修改了 `.github/workflows/build.yml` 工作流文件。移除了 `push` 和 `pull_request` 触发器，仅保留 `workflow_dispatch` 触发器。此后，代码推送将不会触发自动编译，需要手动在 GitHub 仓库的 Actions 页面点击 "Run workflow" 按钮来启动编译。
