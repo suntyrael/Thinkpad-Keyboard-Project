@@ -17,3 +17,8 @@ CONFIG_BT_CTLR_ADVANCED_FEATURES=y
 CONFIG_BT_CTLR_LLL_PRIO=1
 CONFIG_BT_CTLR_ULL_HIGH_PRIO=2
 CONFIG_BT_CTLR_ULL_LOW_PRIO=2
+
+# Set BT device name to satisfy ZMK's default BT_DEVICE_NAME_MAX of 16.
+# Since the board name "thinkpad_wireless" (17 chars) is too long for the default
+# BT GAP name (which must be < BT_DEVICE_NAME_MAX, i.e., <= 15 chars).
+CONFIG_BT_DEVICE_NAME="ThinkpadWL"
