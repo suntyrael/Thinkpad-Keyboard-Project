@@ -119,3 +119,11 @@
 
 ### [2026-07-10] v1.0.11 — 修复 GPIOTE 断言错误
 1. **显式启用 gpiote 节点**：在 Zephyr 4.x/nrfx 的新版校验规则下，如果 GPIO 端口配置了中断触发支持，就必须确保底层的 `gpiote` 实例处于激活状态。因默认设备树中该节点未默认开启，导致了 `gpio_nrfx.c` 触发 `BUILD_ASSERT` 编译失败。我们在 `thinkpad_wireless.dts` 的尾部追加了 `&gpiote { status = "okay"; };`，显式激活该模块，彻底解决此静态断言错误。
+
+### [2026-07-10] v1.0.12 | 规范板级文件迁移至 HWMv2
+1. **ZMK 主线版本恢复**：将 `config/west.yml` 中的 ZMK 核心库版本恢复为 `main`，以启用 Zephyr 4.1.0 所支持的 HWMv2 机制。
+2. **模块板级路径注册**：修改 `zephyr/module.yml` 将 `board_root` 设置为 `module`，使 Zephyr 能在模块目录下自动查找板级定义。
+3. **板级目录嵌套规范化**：将板级文件目录移动至 `module/boards/thinkpad/thinkpad_wireless/`，并遵循 HWMv2 的 `boards/<vendor>/<board_name>` 的厂商嵌套命名规范。
+4. **Kconfig 文件重命名**：将 `Kconfig.board` 重命名为 `Kconfig.thinkpad_wireless`，以满足 HWMv2 的自动搜集命名要求。
+5. **CMake 引入相对路径修复**：由于增加了一级厂商嵌套目录，将 `CMakeLists.txt` 中的全局应用头文件路径更新为 `../../../include`。
+6. **自动化流水线触发机制**：为 `.github/workflows/build.yml` 的推送和 PR 事件追加了路径过滤触发规则，确保后续代码变更能自动校验编译。
