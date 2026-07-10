@@ -113,3 +113,6 @@
 
 ### [2026-07-10] v1.0.9 — 修复底层输入子系统回调宏参数错误
 1. **INPUT_CALLBACK_DEFINE 宏签名更新**：针对 Zephyr OS (3.6+) 中 Input 子系统的 API 演进，修正了 `drivers/input_listener_ps2.c` 中报错的问题。新版本的 `INPUT_CALLBACK_DEFINE` 必须接收 3 个参数（设备指针、回调函数指针、上下文参数指针），我们已为其补充传入 `NULL`。同时，为绑定的回调函数补齐了相应的 `void *user_data` 参数，使底层宏绑定逻辑与 Zephyr 4.x (ZMK 4.4.1) 的 Input 系统完美兼容。
+
+### [2026-07-10] v1.0.10 — 修复蓝牙名称超出系统限制的断言错误
+1. **放宽最大名称长度限制并设定蓝牙名称**：由于默认 `CONFIG_BT_DEVICE_NAME_MAX`（通常为 28）无法容纳过长的默认键盘设备名，触发了 Zephyr 主机蓝牙子系统的 `BUILD_ASSERT` 静态断言。已在 `thinkpad_wireless_defconfig` 中明确设定 `CONFIG_ZMK_KEYBOARD_NAME="Thinkpad Wireless"`，并将其最大长度配置 `CONFIG_BT_DEVICE_NAME_MAX` 放宽至 `32`，双管齐下彻底解决该编译断言失败问题。
