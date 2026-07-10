@@ -175,3 +175,7 @@
 
 ### [2026-07-10] v1.0.16 — 解决自定义 DTS 绑定路径未注册导致编译宏未定义的问题
 1. **注册自定义 DTS 路径**：在 `zephyr/module.yml` 的 `settings` 块中显式指定了 `dts_root: module`。在 HWMv2 重构中，自定义模块下的 Devicetree 绑定配置（如 `gpio-ps2.yaml` 和 `zmk,input-mouse-ps2.yaml`）在没有指定 `dts_root` 搜索根路径的情况下，无法被 Zephyr 的 DTS 解析器发现和识别，这导致相关驱动源文件（`input_mouse_ps2.c` 和 `ps2_gpio.c`）在编译时因为设备树节点无法生成正确的 phandle 依赖宏而报 `__device_dts_ord_...` 未定义的编译错误。注册后成功解决此问题。
+
+
+### [2026-07-10] v1.0.17 — 修复 USBD 禁用导致的 USB 协议栈链接未定义引用报错
+1. **显式启用 USBD 外设节点**：在 `thinkpad_wireless.dts` 设备树中显式追加并启用了 `&usbd` 节点（`status = "okay"`）。在 Zephyr/ZMK 构建下，由于默认的 `nrf52840.dtsi` 中 `usbd` 状态为 `"disabled"` 且未在板级 DTS 中开启，导致 ZMK 的 USB 设备协议栈被关闭。这引发了 ZMK 应用核心逻辑（`indicator_leds.c` 等）在链接阶段报出对 `zmk_usb_get_conn_state` 和 `zmk_event_zmk_usb_conn_state_changed` 的 `undefined reference` 未定义引用报错。使能该物理控制器后解决了该链接错误。

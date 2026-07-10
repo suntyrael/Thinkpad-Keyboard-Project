@@ -1,4 +1,4 @@
-# HWMv2 Migration & BOM / BLE Name / ADC Enablement / CMake Include / DTS bindings Tasks
+# HWMv2 Migration & BOM / BLE Name / ADC & USBD Enablement / CMake Include / DTS bindings Tasks
 
 - `[x]` Modify `config/west.yml` to set `revision` to `main`
 - `[x]` Modify `zephyr/module.yml` to register `board_root: module` and add Twister `boards` list
@@ -13,8 +13,9 @@
 - `[x]` Shorten `CONFIG_ZMK_KEYBOARD_NAME` in `config/thinkpad_wireless.conf` to `"ThinkpadWireless"` (<=16 characters) to pass BLE static assertion
 - `[x]` Add `CONFIG_BT_DEVICE_NAME="ThinkpadWL"` (<=15 characters) in `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig` to prevent Zephyr GAP name length static assertion error
 - `[x]` Enable `&adc` node in `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts` to solve the battery voltage divider compilation error (`Unsupported ADC`)
+- `[x]` Enable `&usbd` node in `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts` to solve the USB link stage compilation error (undefined references to ZMK USB helper functions)
 - `[x]` Explicitly enable `CONFIG_ADC_NRFX_SAADC=y` in `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig`
 - `[x]` Rename deprecated `column-offset` to `col-offset` inside the composite kscan node in `thinkpad_wireless.dts`
 - `[x]` Add "Coding Constraints" section in `Docs/development_log.md` (covering BOM restriction, LF format, and BLE/GAP name length limits)
-- `[x]` Add `v1.0.12`, `v1.0.13`, `v1.0.14`, `v1.0.15`, and `v1.0.16` changelog entries in `Docs/development_log.md`
+- `[x]` Add `v1.0.12`, `v1.0.13`, `v1.0.14`, `v1.0.15`, `v1.0.16`, and `v1.0.17` changelog entries in `Docs/development_log.md`
 - `[x]` Push all changes to GitHub branch `zmk-official-hwmv2-fix`

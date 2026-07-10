@@ -1,6 +1,6 @@
 # Walkthrough - thinkpad_wireless Board HWMv2 Migration & Build Fixes
 
-This walkthrough details the structural changes, config updates, encoding corrections, name shortening, ADC node enablement, CMake include path adjustments, and Devicetree bindings path registrations applied to migrate the custom `thinkpad_wireless` board to Hardware Model v2 (HWMv2) under the ZMK `main` branch.
+This walkthrough details the structural changes, config updates, encoding corrections, name shortening, ADC/USBD node enablement, CMake include path adjustments, and Devicetree bindings path registrations applied to migrate the custom `thinkpad_wireless` board to Hardware Model v2 (HWMv2) under the ZMK `main` branch.
 
 ## Changes Made
 
@@ -25,6 +25,7 @@ This walkthrough details the structural changes, config updates, encoding correc
   - Added `CONFIG_ADC_NRFX_SAADC=y` to explicitly enable the Nordic SAADC driver for the battery divider.
 - **[thinkpad_wireless.dts](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts)**:
   - Enabled the `&adc` node (`status = "okay";`) at the end of the file. By default, the `adc` node in Nordic's `nrf52840.dtsi` is disabled. Without explicitly enabling it, Zephyr's SAADC driver Kconfig dependencies are not met, resulting in ZMK's battery sensor driver (`battery_voltage_divider.c`) failing to compile with `#error Unsupported ADC`.
+  - Enabled the `&usbd` node (`status = "okay";`) at the end of the file. By default, the `usbd` USB controller node in Nordic's `nrf52840.dtsi` is disabled. Without explicitly enabling it, ZMK's USB stack cannot be enabled, which causes compilation/linking errors due to undefined references to ZMK USB helper functions (like `zmk_usb_get_conn_state`) in the application logic.
   - Renamed the deprecated `column-offset` property inside the `kscan_composite` node's `direct` child node to `col-offset` to satisfy the latest ZMK device tree bindings and silence the compiler warning.
 
 ### 4. CI Workflow Enhancements
@@ -40,7 +41,7 @@ This walkthrough details the structural changes, config updates, encoding correc
   - `module/Kconfig`
   - `Requirements/Requirements.md`
 - **[development_log.md](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/Docs/development_log.md)**:
-  - Updated the log with v1.0.14, v1.0.15, and v1.0.16 changelog entries.
+  - Updated the log with v1.0.14, v1.0.15, v1.0.16, and v1.0.17 changelog entries.
 
 ---
 
@@ -48,6 +49,6 @@ This walkthrough details the structural changes, config updates, encoding correc
 
 - **BOM Cleanliness Verification**: Verified that all source and config files in `module/` and `config/` are now free of BOM bytes.
 - **Directory Layout Verification**: Confirmed that the new layout follows HWMv2 requirements.
-- **DTS and Kconfig Dependency Verification**: Confirmed that the ADC node is now enabled, ensuring that the SAADC driver is correctly built and mapped to the battery sensor.
+- **DTS and Kconfig Dependency Verification**: Confirmed that the ADC and USBD nodes are now enabled, ensuring that the SAADC driver is correctly built and mapped to the battery sensor, and the ZMK USB device stack is successfully compiled.
 - **Header Resolution Verification**: Confirmed that driver files under `module/` now have proper access to application include paths during compilation.
 - **Devicetree Bindings Scope Verification**: Verified that custom DTS binding structures (such as `gpio-ps2` and `zmk,input-mouse-ps2`) are correctly mapped and identified by the Devicetree parser, resulting in correct dependency ordinal output in generated build headers.

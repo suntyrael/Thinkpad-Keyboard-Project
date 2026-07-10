@@ -252,3 +252,8 @@
 &adc {
     status = "okay";
 };
+
+&usbd {
+    compatible = "nordic,nrf-usbd";
+    status = "okay";
+};
