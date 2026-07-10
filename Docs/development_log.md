@@ -110,3 +110,6 @@
 1. **系统 API 兼容性复核**：完成 3 轮全面代码审查（Driver API、DTS & CMake、Kconfig & Dependency）。确认 `ps2_gpio.c`、`ps2_uart.c` 等底层外设驱动的 `DEVICE_DT_INST_DEFINE` 初始化回调函数参数传递形式在 Zephyr 4.x/ZMK 4.4.1 标准下结构健康且能保持向后兼容。
 2. **编译路径与作用域约束**：确认 `CMakeLists.txt` 中已采用 `zephyr_library_include_directories` 精准限制了头文件作用范围，避免了自定义板级配置同 ZMK 主分支的内部路径产生全局冲突的隐患。
 3. **配置宏定义对齐**：确认 `Kconfig.thinkpad_wireless` 中通过中间辅助宏以及 `dt_compat_enabled` 的结合使用，有效规避了新版 Kconfig 预处理机制导致的参数切分编译失败问题，目前整体工程代码结构已与 Zephyr 4.1.0 (ZMK 4.4.1) 规范完全对齐。
+
+### [2026-07-10] v1.0.9 — 修复底层输入子系统回调宏参数错误
+1. **INPUT_CALLBACK_DEFINE 宏签名更新**：针对 Zephyr OS (3.6+) 中 Input 子系统的 API 演进，修正了 `drivers/input_listener_ps2.c` 中报错的问题。新版本的 `INPUT_CALLBACK_DEFINE` 必须接收 3 个参数（设备指针、回调函数指针、上下文参数指针），我们已为其补充传入 `NULL`。同时，为绑定的回调函数补齐了相应的 `void *user_data` 参数，使底层宏绑定逻辑与 Zephyr 4.x (ZMK 4.4.1) 的 Input 系统完美兼容。
