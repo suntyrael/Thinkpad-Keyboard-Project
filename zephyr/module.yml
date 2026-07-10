@@ -1,3 +1,7 @@
-﻿build:
+build:
   cmake: module
   kconfig: module/Kconfig
+  settings:
+    board_root: module
+boards:
+  - module/boards

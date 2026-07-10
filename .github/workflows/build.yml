@@ -1,6 +1,20 @@
 name: Build
 
 on:
+  push:
+    paths:
+      - ".github/workflows/build.yml"
+      - "build.yaml"
+      - "config/**"
+      - "module/**"
+      - "zephyr/**"
+  pull_request:
+    paths:
+      - ".github/workflows/build.yml"
+      - "build.yaml"
+      - "config/**"
+      - "module/**"
+      - "zephyr/**"
   workflow_dispatch:
 
 jobs:
