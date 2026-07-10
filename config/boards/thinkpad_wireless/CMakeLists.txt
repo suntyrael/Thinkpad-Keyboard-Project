@@ -3,15 +3,15 @@
 
 zephyr_library()
 
-# Include ZMK application headers
-zephyr_include_directories(${CMAKE_SOURCE_DIR}/include)
-zephyr_include_directories(${CMAKE_SOURCE_DIR}/module/include)
+# Include ZMK application headers scoped to this board library only
+zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)
+zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/module/include)
 
 zephyr_library_sources_ifdef(CONFIG_BOARD_THINKPAD_WIRELESS board.c)
 zephyr_library_sources_ifdef(CONFIG_BOARD_THINKPAD_WIRELESS status_leds.c)
 
 # TrackPoint driver compilation
-zephyr_include_directories(include)
+zephyr_library_include_directories(include)
 
 zephyr_library_sources_ifdef(CONFIG_PS2_GPIO drivers/ps2_gpio.c)
 zephyr_library_sources_ifdef(CONFIG_PS2_UART drivers/ps2_uart.c)

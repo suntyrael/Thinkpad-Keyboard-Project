@@ -13,10 +13,6 @@ DT_COMPAT_PS2_GPIO := gpio-ps2
 DT_COMPAT_PS2_UART := uart-ps2
 
 # TrackPoint PS/2 Driver Configurations
-config PS2
-    bool
-    default y if ZMK_INPUT_MOUSE_PS2
-
 config ZMK_INPUT_MOUSE_PS2
     bool "Enable ZMK PS/2 Mouse/TrackPoint driver"
     depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL)
@@ -43,27 +39,3 @@ config PS2_UART
     select SERIAL
     select UART_ASYNC_API
     select UART_USE_RUNTIME_CONFIGURE
-
-if PS2_GPIO
-config BT_CTLR_ADVANCED_FEATURES
-    default y
-config BT_CTLR_LLL_PRIO
-    default 1
-config BT_CTLR_ULL_HIGH_PRIO
-    default 2
-config BT_CTLR_ULL_LOW_PRIO
-    default 2
-endif
-
-if PS2_UART
-config PM_DEVICE
-    default y
-config BT_CTLR_ADVANCED_FEATURES
-    default y
-config BT_CTLR_LLL_PRIO
-    default 1
-config BT_CTLR_ULL_HIGH_PRIO
-    default 2
-config BT_CTLR_ULL_LOW_PRIO
-    default 2
-endif
