@@ -1,0 +1,10 @@
+# Copyright (c) 2024 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+if BOARD_THINKPAD_WIRELESS
+
+# Name must be 16 characters or less
+config ZMK_KEYBOARD_NAME
+    default "ThinkpadWireless"
+
+endif # BOARD_THINKPAD_WIRELESS

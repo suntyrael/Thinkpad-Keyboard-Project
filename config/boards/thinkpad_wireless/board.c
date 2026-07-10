@@ -34,7 +34,6 @@ static int board_gpio_init(const struct device *dev)
     gpio_pin_configure(gpio1_dev,  2, GPIO_OUTPUT_HIGH); /* P1.02  BT LED          */
     gpio_pin_configure(gpio1_dev,  6, GPIO_OUTPUT_HIGH); /* P1.06  Battery Red LED  */
     gpio_pin_configure(gpio1_dev,  4, GPIO_OUTPUT_HIGH); /* P1.04  Battery Green LED*/
-    gpio_pin_configure(gpio0_dev, 29, GPIO_OUTPUT_HIGH); /* P0.29  Power LED        */
     gpio_pin_configure(gpio1_dev, 15, GPIO_OUTPUT_HIGH); /* P1.15  Mute LED         */
     gpio_pin_configure(gpio1_dev,  7, GPIO_OUTPUT_HIGH); /* P1.07  Mic Mute LED     */
 
