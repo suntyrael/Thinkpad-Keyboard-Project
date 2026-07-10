@@ -100,3 +100,8 @@
 
 ### [2026-07-10] v1.0.6 — 调整 GitHub Actions 为手动编译触发
 1. **修改触发机制**：为了避免频繁 Push 代码导致频繁触发 GitHub Actions 云端编译，修改了 `.github/workflows/build.yml` 工作流文件。移除了 `push` 和 `pull_request` 触发器，仅保留 `workflow_dispatch` 触发器。此后，代码推送将不会触发自动编译，需要手动在 GitHub 仓库的 Actions 页面点击 "Run workflow" 按钮来启动编译。
+
+### [2026-07-10] v1.0.7 — 修复初始化回调与底层层解构兼容问题
+1. **层去激活参数修正**：在 `input_listener_ps2.c` 的 `zmk_input_listener_ps2_layer_toggle_deactivate_layer` 中，为 `zmk_keymap_layer_deactivate` 补充了第二个参数 `false` (locking 参数)，以对齐 ZMK 新版图层锁定与解锁 API 签名。
+2. **SYS_INIT 回调签名对齐**：根据 Zephyr 4.x 最新规范，将 `board.c` 和 `status_leds.c` 中的 `SYS_INIT` 初始化回调函数参数签名从 `int init_fn(const struct device *dev)` 改为 `int init_fn(void)`，消除了参数不匹配的编译器警告。
+3. **USB 状态检测无感封装**：删除了 `status_leds.c` 中依赖 Nordic HAL 的只读 `nrf_power_usbdetected_get` 硬件宏，使用更高层的、与硬件平台无关的 ZMK 官方 USB 状态获取函数 `zmk_usb_is_powered()` 代替，并在无 USB 设备栈配置时加入防御性降级防护，解决了在新版 nrfx 库中底层 USB 检测接口不匹配的警告。
