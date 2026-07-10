@@ -1,4 +1,4 @@
-﻿# ThinkPad Keyboard Wireless Project
+# ThinkPad Keyboard Wireless Project
 
 本项目致力于将联想 **ThinkPad X220 / T420** 的经典键盘（使用 BTB 40-pin 接口）转换为支持 **蓝牙/USB 双模** 的无线键盘。
 
