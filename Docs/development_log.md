@@ -86,3 +86,7 @@
    - 将 `input_mouse_ps2.c` 中的已废弃宏 `K_THREAD_STACK_MEMBER` 替换为 `K_KERNEL_STACK_MEMBER`。
    - 将 `input_listener_ps2.c` 中的端点发送函数从 `zmk_endpoints_send_mouse_report` 修正为最新 API `zmk_endpoint_send_mouse_report`。
    - 修复 `zmk_keymap_layer_activate` 的参数传递，增加布尔型 `locking` 参数（设为 `false`）以匹配最新 ZMK 层的锁定机制。
+
+### [2026-07-10] v1.0.3 — 修复 Kconfig 预处理器宏解析错误与版本声明
+1. **修复兼容性检测**：将 `Kconfig.thinkpad_wireless` 中直接使用带逗号的 compatible 字符串（如 `zmk,input-mouse-ps2`）改为先通过 `:=` 定义变量，再通过 `$(dt_compat_enabled,$(VAR))` 引用，解决 Kconfig 预处理器将逗号误判为多参数分隔符导致的 `bad number of arguments in call to dt_compat_enabled` 编译报错。
+2. **固件基线版本说明**：针对升级 ZMK/Zephyr 到最新版本的要求，分析并厘清了 ZMK 主线核心与 Zephyr 4.4.1 的适配关系，确认当前采用的最优编译环境基线依然为 ZMK 官方主推的 Zephyr 4.1.0。
