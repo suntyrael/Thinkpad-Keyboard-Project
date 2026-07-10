@@ -1,12 +1,14 @@
 # Walkthrough - thinkpad_wireless Board HWMv2 Migration & Build Fixes
 
-This walkthrough details the structural changes, config updates, encoding corrections, name shortening, ADC node enablement, and CMake include path adjustments applied to migrate the custom `thinkpad_wireless` board to Hardware Model v2 (HWMv2) under the ZMK `main` branch.
+This walkthrough details the structural changes, config updates, encoding corrections, name shortening, ADC node enablement, CMake include path adjustments, and Devicetree bindings path registrations applied to migrate the custom `thinkpad_wireless` board to Hardware Model v2 (HWMv2) under the ZMK `main` branch.
 
 ## Changes Made
 
 ### 1. ZMK Dependency & Build Configuration
 - **[west.yml](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/config/west.yml)**: Restored `revision: main` for the ZMK project, enabling support for Zephyr 4.1.0/HWMv2.
-- **[module.yml](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/zephyr/module.yml)**: Replaced the outdated `build: boards:` block with the standard Zephyr module setting `board_root: module` under `build: settings:`. Also registered `boards` at the root level for Twister.
+- **[module.yml](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/zephyr/module.yml)**:
+  - Replaced the outdated `build: boards:` block with the standard Zephyr module setting `board_root: module` under `build: settings:`. Also registered `boards` at the root level for Twister.
+  - Added `dts_root: module` under the `settings` block. This informs Zephyr's Devicetree compiler where to locate the custom Devicetree bindings (such as `gpio-ps2.yaml` and `zmk,input-mouse-ps2.yaml` under `module/dts/bindings/`). Without this, the DTS compiler fails to recognize custom properties and phandles (such as `ps2-device` in `/mouse_ps2` or `scl-gpios` in `/gpio_ps2`), causing compilation errors due to undefined `__device_dts_ord_...` phandle reference macros in the driver C files.
 
 ### 2. Board Directory & Kconfig Renaming
 - Relocated the board files from `module/boards/thinkpad_wireless` to `module/boards/thinkpad/thinkpad_wireless` to follow the required `boards/<vendor>/<board_name>` nesting layout under HWMv2.
@@ -38,7 +40,7 @@ This walkthrough details the structural changes, config updates, encoding correc
   - `module/Kconfig`
   - `Requirements/Requirements.md`
 - **[development_log.md](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/Docs/development_log.md)**:
-  - Updated the log with v1.0.14 and v1.0.15 changelog entries.
+  - Updated the log with v1.0.14, v1.0.15, and v1.0.16 changelog entries.
 
 ---
 
@@ -48,3 +50,4 @@ This walkthrough details the structural changes, config updates, encoding correc
 - **Directory Layout Verification**: Confirmed that the new layout follows HWMv2 requirements.
 - **DTS and Kconfig Dependency Verification**: Confirmed that the ADC node is now enabled, ensuring that the SAADC driver is correctly built and mapped to the battery sensor.
 - **Header Resolution Verification**: Confirmed that driver files under `module/` now have proper access to application include paths during compilation.
+- **Devicetree Bindings Scope Verification**: Verified that custom DTS binding structures (such as `gpio-ps2` and `zmk,input-mouse-ps2`) are correctly mapped and identified by the Devicetree parser, resulting in correct dependency ordinal output in generated build headers.

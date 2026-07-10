@@ -3,5 +3,6 @@ build:
   kconfig: module/Kconfig
   settings:
     board_root: module
+    dts_root: module
 boards:
   - module/boards

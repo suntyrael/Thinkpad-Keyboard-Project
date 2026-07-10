@@ -171,3 +171,7 @@
 
 ### [2026-07-10] v1.0.15 — 解决自定义模块无法继承 ZMK 应用头文件路径的编译报错
 1. **添加应用头文件路径**：在 `module/CMakeLists.txt` 中显式追加了 `zephyr_library_include_directories(${CMAKE_SOURCE_DIR}/include)` 包含路径。自定义模块（`module` 静态库 target）在编译外设驱动与输入监听器（如 `input_listener_ps2.c`）时，由于作用域隔离默认无法访问 ZMK 的应用级头文件，引发无法找到 `<zmk/endpoints.h>` 和 `<zmk/event_manager.h>` 等核心头文件的报错。引入该路径后成功解决了头文件包含失败的问题。
+
+
+### [2026-07-10] v1.0.16 — 解决自定义 DTS 绑定路径未注册导致编译宏未定义的问题
+1. **注册自定义 DTS 路径**：在 `zephyr/module.yml` 的 `settings` 块中显式指定了 `dts_root: module`。在 HWMv2 重构中，自定义模块下的 Devicetree 绑定配置（如 `gpio-ps2.yaml` 和 `zmk,input-mouse-ps2.yaml`）在没有指定 `dts_root` 搜索根路径的情况下，无法被 Zephyr 的 DTS 解析器发现和识别，这导致相关驱动源文件（`input_mouse_ps2.c` 和 `ps2_gpio.c`）在编译时因为设备树节点无法生成正确的 phandle 依赖宏而报 `__device_dts_ord_...` 未定义的编译错误。注册后成功解决此问题。
