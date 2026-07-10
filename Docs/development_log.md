@@ -20,7 +20,7 @@
 
 ### 指针指点杆 (TrackPoint PS/2) 引脚
 *   **时钟线 (TP4CLK)**：P1.13，带内部上拉。
-*   **数据线 (TP4DATA)**：P1.10，带内部上拉.
+*   **数据线 (TP4DATA)**：P1.10，带内部上拉。
 *   **复位线 (TP4_RESET)**：P1.09，低电平有效。
 
 ### 独立直连按键
@@ -50,7 +50,7 @@
 *   **分析**：ThinkPad X220 键盘物理排线的矩阵排布（8 行 Sense x 16 列 Drive）在走线上属于混淆乱序排布。若在设备树的 `matrix-transform` 中进行 1 对 1 线性映射，会导致物理按键大量错乱。
 *   **设计**：我们参考 `thinkpad-ec` 社区对 IBM/Lenovo 官方键盘扫描表的反编译结果（16列 Drive x 8行 Sense），在 DTS 文件的 `default_transform` 中对全部 130 个交叉按键坐标进行了完整解密映射：
     *   例如：物理 `Esc` 按键（由 Sense 5 和 Drive 0 闭合触发）被正确映射为 ZMK 键值数组的第一个索引（逻辑 `Esc`），从而实现**键盘物理按键完美归位，同时 keymap 文件保持极高可读性**。
-*   **多媒体及功能键映射**：在 Row 6 键值中，完整实现了音量增减、静音、麦克风静音、翻页、前后导航键、截图及 Pause 键。
+*   **多媒体及功能键映射**：在 Row 6 键值中，完整实现了音量增减防抖、静音、麦克风静音、翻页、前后导航键、截图及 Pause 键。
 
 ### 2.3 小红帽 (TrackPoint) 驱动与复合扫描
 *   **驱动集成**：在 `west.yml` 中集成了 `tails-dev/kb_zmk_ps2_mouse_trackpoint_driver` 外部模块。在设备树中配置 `compatible = "gpio-ps2";` 总线节点，挂载 `compatible = "zmk,input-mouse-ps2";` 鼠标节点，并通过 `zmk,input-listener-ps2` 接收坐标变化并转化为 ZMK 指针报文。
@@ -74,7 +74,7 @@
 
 1. **禁止包含 UTF-8 BOM 字节**：
    * 所有源文件（包括 `.c`、`.h`、`.dts`、`.yaml`、`Kconfig*`、`defconfig`、`.yml` 等）必须采用 **UTF-8 无 BOM** (UTF-8 without BOM / UTF-8) 编码保存。
-   * Windows 部分编辑器（例如默认记事本或未配置的 VS Code）可能会在文件头部写入 BOM 头（十六进制字节：`EF BB BF`），这会导致 Linux 环境下的 Kconfig 预处理器 (`kconfig.py`) 或 YAML 解析器报 `unknown token at start of line` 等语法解析错误。
+   * Windows 部分编辑器（例如默认记事本或未配置 VS Code）可能会在文件头部写入 BOM 头（十六进制字节：`EF BB BF`），这会导致 Linux 环境下的 Kconfig 预处理器 (`kconfig.py`) 或 YAML 解析器报 `unknown token at start of line` 等语法解析错误。
 2. **换行符格式规范 (LF)**：
    * 为了与开源 ZMK/Zephyr 社区项目标准保持一致，使用 LF 作为换行符。Git 提交时应确保换行符能够被自动处理或保持 LF 状态。
 3. **配置与验证方法**：
@@ -93,9 +93,9 @@
          }
      }
      ```
-4. **蓝牙设备名称长度限制**：
-   * 在 `config/thinkpad_wireless.conf` 中配置 `CONFIG_ZMK_KEYBOARD_NAME` 时，字符长度**不得超过 16 个字符**。
-   * ZMK 固件会在 `ble.c` 中通过 `BUILD_ASSERT(sizeof(CONFIG_ZMK_KEYBOARD_NAME) - 1 <= 16)` 强制进行静态断言校验，超出 16 字节会导致编译失败。
+4. **蓝牙名称及 GAP 名称长度限制**：
+   * **ZMK 设备名称**：在 `config/thinkpad_wireless.conf` 中配置 `CONFIG_ZMK_KEYBOARD_NAME` 时，其长度**不得超过 16 个字符**。ZMK 固件会在 `ble.c` 中通过 `BUILD_ASSERT(sizeof(CONFIG_ZMK_KEYBOARD_NAME) - 1 <= 16)` 强制进行静态断言校验。
+   * **Zephyr GAP 名称**：默认的 `CONFIG_BT_DEVICE_NAME` 会采用板子名称（即 `"thinkpad_wireless"`，长达 17 字符），而 ZMK 强制设定了 `CONFIG_BT_DEVICE_NAME_MAX=16`，这会触发 Zephyr 协议栈的静态断言：`BUILD_ASSERT(DEVICE_NAME_LEN < CONFIG_BT_DEVICE_NAME_MAX)`（设备名长度必须严格小于 16，即最长 15 字节）。因此在 `thinkpad_wireless_defconfig` 中必须显式定义 `CONFIG_BT_DEVICE_NAME` 且其长度**不得超过 15 个字符**（目前已设定为 `"ThinkpadWL"`）。
 
 ---
 
@@ -159,5 +159,6 @@
 5. **CMake 引入相对路径修复**：由于增加了一级厂商嵌套目录，将 `CMakeLists.txt` 中的全局应用头文件路径更新为 `../../../include`。
 6. **自动化流水线触发机制**：为 `.github/workflows/build.yml` 的推送和 PR 事件追加了路径过滤触发规则，确保后续代码变更能自动校验编译。
 
-### [2026-07-10] v1.0.13 — 缩短蓝牙设备名以满足 ZMK 静态断言限制
-1. **短名称调整**：ZMK 官方固件在 `app/src/ble.c` 中强制要求蓝牙设备名称（`CONFIG_ZMK_KEYBOARD_NAME`）的长度不得超过 16 个字符，即触发 `BUILD_ASSERT(sizeof(CONFIG_ZMK_KEYBOARD_NAME) - 1 <= 16)` 静态校验。先前设置的 `"Thinkpad Wireless"` 包含空格共 17 个字符，导致编译断言报错。已将其缩短为 `"ThinkpadWireless"`（共 16 字符），顺利通过固件编译阶段。
+### [2026-07-10] v1.0.13 — 解决蓝牙名称及 GAP 设备名超长断言报错
+1. **ZMK 键盘名缩短**：由于 ZMK 在 `ble.c` 中强制要求 `CONFIG_ZMK_KEYBOARD_NAME` 长度不得超过 16 字节，我们将原名 `"Thinkpad Wireless"` 缩短为 `"ThinkpadWireless"`，解决编译报错。
+2. **GAP 设备名称覆盖**：因本板名称 `"thinkpad_wireless"`（17 字符）长于 ZMK 项目强制配置的 `CONFIG_BT_DEVICE_NAME_MAX=16`，导致 Zephyr 主机蓝牙子系统在编译时触发 `BUILD_ASSERT(DEVICE_NAME_LEN < CONFIG_BT_DEVICE_NAME_MAX)` 静态断言失败（即默认设备名必须 <= 15 字节）。已在 `thinkpad_wireless_defconfig` 中显式定义 `CONFIG_BT_DEVICE_NAME="ThinkpadWL"`（10 字符），成功解决此断言错误。
