@@ -105,3 +105,8 @@
 1. **层去激活参数修正**：在 `input_listener_ps2.c` 的 `zmk_input_listener_ps2_layer_toggle_deactivate_layer` 中，为 `zmk_keymap_layer_deactivate` 补充了第二个参数 `false` (locking 参数)，以对齐 ZMK 新版图层锁定与解锁 API 签名。
 2. **SYS_INIT 回调签名对齐**：根据 Zephyr 4.x 最新规范，将 `board.c` 和 `status_leds.c` 中的 `SYS_INIT` 初始化回调函数参数签名从 `int init_fn(const struct device *dev)` 改为 `int init_fn(void)`，消除了参数不匹配的编译器警告。
 3. **USB 状态检测无感封装**：删除了 `status_leds.c` 中依赖 Nordic HAL 的只读 `nrf_power_usbdetected_get` 硬件宏，使用更高层的、与硬件平台无关的 ZMK 官方 USB 状态获取函数 `zmk_usb_is_powered()` 代替，并在无 USB 设备栈配置时加入防御性降级防护，解决了在新版 nrfx 库中底层 USB 检测接口不匹配的警告。
+
+### [2026-07-10] v1.0.8 — 全面代码审查与兼容性确认
+1. **系统 API 兼容性复核**：完成 3 轮全面代码审查（Driver API、DTS & CMake、Kconfig & Dependency）。确认 `ps2_gpio.c`、`ps2_uart.c` 等底层外设驱动的 `DEVICE_DT_INST_DEFINE` 初始化回调函数参数传递形式在 Zephyr 4.x/ZMK 4.4.1 标准下结构健康且能保持向后兼容。
+2. **编译路径与作用域约束**：确认 `CMakeLists.txt` 中已采用 `zephyr_library_include_directories` 精准限制了头文件作用范围，避免了自定义板级配置同 ZMK 主分支的内部路径产生全局冲突的隐患。
+3. **配置宏定义对齐**：确认 `Kconfig.thinkpad_wireless` 中通过中间辅助宏以及 `dt_compat_enabled` 的结合使用，有效规避了新版 Kconfig 预处理机制导致的参数切分编译失败问题，目前整体工程代码结构已与 Zephyr 4.1.0 (ZMK 4.4.1) 规范完全对齐。
