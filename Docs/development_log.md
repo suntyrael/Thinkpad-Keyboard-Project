@@ -90,3 +90,6 @@
 ### [2026-07-10] v1.0.3 — 修复 Kconfig 预处理器宏解析错误与版本声明
 1. **修复兼容性检测**：将 `Kconfig.thinkpad_wireless` 中直接使用带逗号的 compatible 字符串（如 `zmk,input-mouse-ps2`）改为先通过 `:=` 定义变量，再通过 `$(dt_compat_enabled,$(VAR))` 引用，解决 Kconfig 预处理器将逗号误判为多参数分隔符导致的 `bad number of arguments in call to dt_compat_enabled` 编译报错。
 2. **固件基线版本说明**：针对升级 ZMK/Zephyr 到最新版本的要求，分析并厘清了 ZMK 主线核心与 Zephyr 4.4.1 的适配关系，确认当前采用的最优编译环境基线依然为 ZMK 官方主推的 Zephyr 4.1.0。
+
+### [2026-07-10] v1.0.4 — 解决板级库与 ZMK 应用头文件的 CMake 作用域冲突
+1. **引入应用头文件路径**：由于驱动文件和 `status_leds.c` 均被归并到了 Zephyr 板级库（`board` 静态库 target）中编译，而板级目标默认无法继承 ZMK 应用目标（`app` target）的头文件包含路径。我们在板级 `CMakeLists.txt` 中通过 `zephyr_include_directories(${CMAKE_SOURCE_DIR}/include)` 和 `${CMAKE_SOURCE_DIR}/module/include` 显式引入了 ZMK 核心头文件路径，解决了 `<zmk/endpoints.h>` 和 `<zmk/event_manager.h>` 等头文件找不到的编译报错。
