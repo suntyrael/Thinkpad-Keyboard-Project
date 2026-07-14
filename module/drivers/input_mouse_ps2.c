@@ -682,7 +682,7 @@ struct zmk_mouse_ps2_send_cmd_resp zmk_mouse_ps2_send_cmd(char *cmd, int cmd_len
     if (resp_len > sizeof(resp.resp_buffer)) {
         resp.err = -11;
         snprintf(resp.err_msg, sizeof(resp.err_msg),
-                 "Response can't be longer than the resp_buffer (%d)", sizeof(resp.err_msg));
+                 "Response can't be longer than the resp_buffer (%zu)", sizeof(resp.resp_buffer));
 
         return resp;
     }
@@ -1641,7 +1641,7 @@ static void zmk_mouse_ps2_init_thread(int dev_ptr, int unused) {
     if (config->sampling_rate != MOUSE_PS2_CMD_SET_SAMPLING_RATE_DEFAULT) {
 
         LOG_INF("Setting sample rate to %d...", config->sampling_rate);
-        zmk_mouse_ps2_set_sampling_rate(config->sampling_rate);
+        err = zmk_mouse_ps2_set_sampling_rate(config->sampling_rate);
         if (err) {
             LOG_ERR("Could not set sampling rate to %d: %d", config->sampling_rate, err);
             return;

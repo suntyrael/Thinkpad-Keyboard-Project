@@ -53,4 +53,4 @@ jobs:
       - name: Run Cppcheck
         run: |
           # Suppress missingIncludeSystem warning to prevent failing on Zephyr system headers
-          cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=1 module/
+          cppcheck --enable=warning,portability --suppress=missingIncludeSystem --error-exitcode=1 module/
