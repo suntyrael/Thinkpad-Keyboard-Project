@@ -191,3 +191,12 @@
    * **开机**：长按开机成功后，所有指示灯（BT灯、绿/红电量灯、静音灯、麦克风静音灯、Caps Lock灯）呈 150ms 间隔顺序点亮，并在全亮 300ms 后全部熄灭，交由 ZMK 系统正常控制。
    * **关机**：长按关机触发后，所有指示灯同时常亮 300ms 作为警示，随后呈 150ms 间隔顺序熄灭。
 6. **过时头文件引用规范清理**：在驱动文件 `behavior_mouse_setting.c` 中将过时的 `#include <drivers/behavior.h>` 更新为现代命名空间风格的 `#include <zephyr/drivers/behavior.h>`。
+
+
+### [2026-07-14] v1.0.18 一 集成 CodeQL 与 Cppcheck 静态扫描并修复代码漏洞
+1. **GitHub Actions 静态分析集成**：
+   * **CodeQL 漏洞扫描**：新增了 [.github/workflows/codeql.yml](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/.github/workflows/codeql.yml) 配置文件，使用免编译的 `build-mode: none` 运行 CodeQL，对项目中的自定义 C 代码进行深度的安全分析与漏洞扫描。
+   * **Cppcheck 静态检查**：在 [.github/workflows/lint.yml](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/.github/workflows/lint.yml) 中集成了 Cppcheck 静态分析工具，配置参数为 `--enable=warning,portability`，仅在发现真实 bug 和可移植性问题时拦截构建，规避普通代码风格建议（Style）导致的误报，并同时在并行的 style-check 任务中进行编码格式（BOM/LF）和 clang-format 的校验。
+2. **修复 Cppcheck 发现的代码 bug**：
+   * **修复错误捕获失效漏洞**：在 [input_mouse_ps2.c](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/drivers/input_mouse_ps2.c) 的 `zmk_mouse_ps2_init_thread` 线程初始化逻辑中，修复了调用 `zmk_mouse_ps2_set_sampling_rate` 但未将其返回值赋值给 `err` 变量的逻辑 Bug（导致后面的错误检测无效化），修正为 `err = zmk_mouse_ps2_set_sampling_rate(...)`。
+   * **修复 printf 格式不匹配与 typo 警报**：在 [input_mouse_ps2.c](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/drivers/input_mouse_ps2.c) 的 `zmk_mouse_ps2_send_cmd` 函数中，修正了 size_t 类型的 `sizeof` 打印时未匹配 `%zu` 格式字符的警告，并修正了拷贝粘贴导致的 typo 笔误（应打印限制缓冲区的大小 `sizeof(resp.resp_buffer)`，而非 `sizeof(resp.err_msg)`）。
