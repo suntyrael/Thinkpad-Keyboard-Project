@@ -29,6 +29,8 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/ble.h>
 #include <zmk/battery.h>
+#include <zmk/events/activity_state_changed.h>
+#include <zmk/activity.h>
 
 /* --------------------------------------------------------------------------
  * Device specs
@@ -54,6 +56,7 @@ static const struct pwm_dt_spec pwm_led = PWM_DT_SPEC_GET(DT_NODELABEL(pwm_led_p
  * -------------------------------------------------------------------------- */
 static volatile bool bt_connected  = false;
 static volatile uint8_t battery_soc = 100; /* 0-100 %, default optimistic */
+static volatile bool is_idle       = false;
 
 /* --------------------------------------------------------------------------
  * LED worker thread
@@ -95,6 +98,10 @@ static void led_thread_fn(void *a, void *b, void *c)
                 LED_OFF(gpio1_dev, BAT_LED_R_PIN);
                 k_msleep(100);
             }
+            /* Turn off 5V Boost (Trackpoint power) to prevent over-discharge */
+            gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
+            gpio_pin_set(gpio0_dev, 12, 0);
+
             /* Turn off all LEDs and go to System OFF */
             LED_OFF(gpio1_dev, BT_LED_PIN);
             LED_OFF(gpio1_dev, BAT_LED_R_PIN);
@@ -116,7 +123,9 @@ static void led_thread_fn(void *a, void *b, void *c)
         /* ---- Status LEDs (BT & Battery) updated every 6 ticks (~480ms) ---- */
         if (tick_count % 6 == 0) {
             /* ---- BT LED ---- */
-            if (bt_connected) {
+            if (is_idle) {
+                LED_OFF(gpio1_dev, BT_LED_PIN);
+            } else if (bt_connected) {
                 LED_ON(gpio1_dev, BT_LED_PIN);        /* solid ON when connected */
             } else {
                 /* blink ~1 Hz while advertising / idle */
@@ -142,7 +151,7 @@ static void led_thread_fn(void *a, void *b, void *c)
                 }
             } else {
                 /* On battery: show level for BOOT_DISPLAY_TICKS then off */
-                if ((tick_count / 6) < BOOT_DISPLAY_TICKS) {
+                if ((tick_count / 6) < BOOT_DISPLAY_TICKS && !is_idle) {
                     if (battery_soc < 10) { /* <3.5V is approx <10% SoC */
                         LED_ON(gpio1_dev, BAT_LED_R_PIN);  /* Low: Red  */
                         LED_OFF(gpio1_dev, BAT_LED_G_PIN);
@@ -197,6 +206,16 @@ static int battery_state_listener(const zmk_event_t *eh)
 ZMK_LISTENER(status_leds_bat, battery_state_listener);
 ZMK_SUBSCRIPTION(status_leds_bat, zmk_battery_state_changed);
 
+/* Activity state changed listener */
+static int activity_state_listener(const zmk_event_t *eh)
+{
+    is_idle = (zmk_activity_get_state() == ZMK_ACTIVITY_IDLE || zmk_activity_get_state() == ZMK_ACTIVITY_SLEEP);
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(status_leds_activity, activity_state_listener);
+ZMK_SUBSCRIPTION(status_leds_activity, zmk_activity_state_changed);
+
 /* --------------------------------------------------------------------------
  * Module init: start the LED worker thread.
  * This runs at APPLICATION level, after ZMK subsystems are ready.
@@ -210,6 +229,7 @@ static int status_leds_init(void)
     /* Seed state from current ZMK values */
     bt_connected  = zmk_ble_active_profile_is_connected();
     battery_soc   = zmk_battery_state_of_charge();
+    is_idle       = (zmk_activity_get_state() == ZMK_ACTIVITY_IDLE || zmk_activity_get_state() == ZMK_ACTIVITY_SLEEP);
 
     k_thread_create(&led_thread_data, led_stack,
                     K_THREAD_STACK_SIZEOF(led_stack),

@@ -1,7 +1,7 @@
 #define DT_DRV_COMPAT zmk_behavior_mouse_setting
 
 #include <zephyr/device.h>
-#include <drivers/behavior.h>
+#include <zephyr/drivers/behavior.h>
 #include <zephyr/logging/log.h>
 
 #include <dt-bindings/zmk/mouse_settings.h>
