@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   style-check:
     name: Code Style & Encoding Check
@@ -12,9 +15,29 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
 
-      # 1. Check file encoding (UTF-8 without BOM) and line endings (LF)
-      - name: Check Line Endings & UTF-8 UTF-8 without BOM
+      # 1. Install clang-format
+      - name: Install Clang-Format
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang-format-15 -y
+
+      # 2. Format C/C++ files
+      - name: Format C/C++ Files
+        run: |
+          find module -type f \( -name "*.c" -o -name "*.h" \) -exec clang-format-15 -i {} +
+
+      # 3. Commit and push any formatting changes back
+      - name: Auto-commit formatted changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: automatic clang-format"
+          file_pattern: 'module/**/*.c module/**/*.h'
+
+      # 4. Check file encoding (UTF-8 without BOM) and line endings (LF)
+      - name: Check Line Endings & UTF-8 without BOM
         run: |
           errors=0
           files=$(find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.dts" -o -name "*.dtsi" -o -name "*.yaml" -o -name "*.yml" -o -name "Kconfig" -o -name "*_defconfig" -o -name "*.conf" \) -not -path "*/.git/*")
@@ -32,13 +55,6 @@ jobs:
             echo "$errors formatting error(s) found."
             exit 1
           fi
-
-      # 2. Check C/C++ formatting (clang-format)
-      - name: Check C Formatting (clang-format)
-        uses: jidicula/clang-format-action@v4.11.0
-        with:
-          clang-format-version: '15'
-          check-path: 'module'
 
   static-analysis:
     name: Cppcheck Static Analysis
