@@ -80,3 +80,33 @@ This release introduces critical battery protection improvements, ZMK Studio phy
 - **GPIO Functionality Verification**: Verified the P0.12 control call is successfully generated in assembly/driver.
 - **Activity State Mapping**: Event subscriptions for activity state transitions are registered and updated asynchronously in the LED thread.
 - **Git Sync Status**: Staged, committed, and successfully pushed to remote branch zmk-official-hwmv2-fix.
+
+---
+
+## V1.02 Release - Manual Power Toggle via PWRSWITCH (2s Power-On, 8s Power-Off, False-Wakeup Re-sleep)
+
+This release implements a soft power toggle function using the PWRSWITCH button (P1.11) and nRF52840's GPREGRET retention register to solve the conflict with automatic deep sleep.
+
+### Changes Made
+
+#### 1. Early Boot Check & 2s Power-On (oard.c)
+- **[MODIFY] [board.c](file:///e:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/board.c)**:
+  - Added #include <soc.h> and #include <zephyr/sys/poweroff.h>.
+  - Checked NRF_POWER->GPREGRET on early boot (PRE_KERNEL_2).
+  - If GPREGRET has the MANUAL_POWER_OFF_FLAG (0xAA), verify that the power button is held for 2 seconds.
+  - If any other key woke the MCU, or if the user released the power button before 2 seconds, immediately cut power to 5V Boost and put the MCU back into System OFF.
+  - If held for 2 seconds, clear the flag, flash the green battery LED 3 times, and boot normally.
+
+#### 2. 8s Power-Off & LED Flashing (status_leds.c)
+- **[MODIFY] [status_leds.c](file:///e:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/status_leds.c)**:
+  - Added #include <soc.h>.
+  - Inside led_thread_fn, monitored the state of PWRSWITCH (P1.11).
+  - If the button is held for 8 seconds (100 consecutive 80ms loop ticks), write the manual power-off flag (0xAA) to NRF_POWER->GPREGRET.
+  - Flash all status LEDs (BT, Red, Green, Mute, Mic Mute, Caps Lock, Power Breathing LED) 3 times.
+  - Cut power to 5V Boost (P0.12 = 0) and enter System OFF.
+
+---
+
+## V1.02 Validation Results
+- **Compile Verification**: Confirmed compilation success without warnings.
+- **Git Sync Status**: Staged, committed, and successfully pushed to remote branch zmk-official-hwmv2-fix.
