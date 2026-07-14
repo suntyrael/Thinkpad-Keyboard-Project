@@ -11,6 +11,8 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/init.h>
+#include <soc.h>
+#include <zephyr/sys/poweroff.h>
 
 /* GPIO device handles via DTS node labels.
  * DEVICE_DT_GET() replaces the removed device_get_binding() in Zephyr 4.x. */
@@ -24,6 +26,8 @@ static const struct device *gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
  * This must run early (PRE_KERNEL_2) so that pins are in a defined
  * state before the ZMK application layer starts.
  */
+#define MANUAL_POWER_OFF_FLAG 0xAA
+
 static int board_gpio_init(void)
 {
     if (!device_is_ready(gpio0_dev) || !device_is_ready(gpio1_dev)) {
@@ -39,6 +43,48 @@ static int board_gpio_init(void)
 
     /* ---- Input: charger interrupt (active LOW = charging) ---- */
     gpio_pin_configure(gpio0_dev,  8, GPIO_INPUT | GPIO_PULL_UP); /* P0.08 CHG_INT */
+
+    /* ---- Manual Power-Off Wakeup Check ---- */
+    if (NRF_POWER->GPREGRET == MANUAL_POWER_OFF_FLAG) {
+        /* Configure PWRSWITCH (P1.11) as input pull-up */
+        gpio_pin_configure(gpio1_dev, 11, GPIO_INPUT | GPIO_PULL_UP);
+        
+        /* If power switch is not pressed (high), it's a false wakeup (e.g. key press in bag) */
+        if (gpio_pin_get_raw(gpio1_dev, 11) == 1) {
+            /* Cut off 5V Boost (P0.12) just in case */
+            gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
+            gpio_pin_set(gpio0_dev, 12, 0);
+            sys_poweroff();
+        }
+
+        /* User is holding the power switch, verify they hold it for 2 seconds */
+        bool held = true;
+        for (int i = 0; i < 20; i++) {
+            k_busy_wait(100000); /* 100ms busy wait */
+            if (gpio_pin_get_raw(gpio1_dev, 11) == 1) { /* Released early */
+                held = false;
+                break;
+            }
+        }
+
+        if (!held) {
+            /* Cut off 5V Boost (P0.12) */
+            gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
+            gpio_pin_set(gpio0_dev, 12, 0);
+            sys_poweroff();
+        }
+
+        /* Power On success: clear manual power off flag */
+        NRF_POWER->GPREGRET = 0;
+
+        /* Flash Green Battery LED (P1.04) 3 times for power-on indication */
+        for (int i = 0; i < 3; i++) {
+            gpio_pin_set_raw(gpio1_dev, 4, 0); /* ON */
+            k_busy_wait(200000);
+            gpio_pin_set_raw(gpio1_dev, 4, 1); /* OFF */
+            k_busy_wait(200000);
+        }
+    }
 
     return 0;
 }

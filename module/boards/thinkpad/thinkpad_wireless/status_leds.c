@@ -31,6 +31,7 @@
 #include <zmk/battery.h>
 #include <zmk/events/activity_state_changed.h>
 #include <zmk/activity.h>
+#include <soc.h>
 
 /* --------------------------------------------------------------------------
  * Device specs
@@ -46,6 +47,7 @@ static const struct pwm_dt_spec pwm_led = PWM_DT_SPEC_GET(DT_NODELABEL(pwm_led_p
 #define BAT_LED_R_PIN   6   /* P1.06  gpio1 */
 #define BAT_LED_G_PIN   4   /* P1.04  gpio1 */
 #define CHG_INT_PIN     8   /* P0.08  gpio0 */
+#define MANUAL_POWER_OFF_FLAG 0xAA
 
 /* Active-LOW LED helpers — set physical pin directly (no polarity abstraction) */
 #define LED_ON(dev, pin)  gpio_pin_set(dev, pin, 0)   /* physical LOW  — LED on  */
@@ -73,6 +75,7 @@ static void led_thread_fn(void *a, void *b, void *c)
     int toggle      = 0;
     int tick_count  = 0;
     int breath_step = 0;
+    int pwr_press_ticks = 0;
 
     /* Breathing duty cycle table (0 to 100) — 50 steps for a 4-second breathing cycle */
     static const uint8_t breath_table[50] = {
@@ -82,6 +85,49 @@ static void led_thread_fn(void *a, void *b, void *c)
     };
 
     while (1) {
+        /* ---- Manual Power-Off Button Check (Hold for 8 seconds) ---- */
+        if (gpio_pin_get_raw(gpio1_dev, 11) == 0) { /* Pressed (active-LOW) */
+            pwr_press_ticks++;
+            if (pwr_press_ticks >= 100) { /* 100 * 80ms = 8000ms = 8 seconds */
+                /* Set manual power off flag in GPREGRET */
+                NRF_POWER->GPREGRET = MANUAL_POWER_OFF_FLAG;
+
+                /* Flash all LEDs 3 times */
+                for (int i = 0; i < 3; i++) {
+                    gpio_pin_set_raw(gpio1_dev, 2, 0); /* BT LED ON */
+                    gpio_pin_set_raw(gpio1_dev, 6, 0); /* Battery Red ON */
+                    gpio_pin_set_raw(gpio1_dev, 4, 0); /* Battery Green ON */
+                    gpio_pin_set_raw(gpio1_dev, 15, 0); /* Mute LED ON */
+                    gpio_pin_set_raw(gpio1_dev, 7, 0); /* Mic Mute LED ON */
+                    gpio_pin_set_raw(gpio0_dev, 31, 0); /* Caps Lock LED ON */
+                    if (pwm_is_ready_dt(&pwm_led)) {
+                        pwm_set_pulse_dt(&pwm_led, pwm_led.period); /* Power LED ON */
+                    }
+                    k_msleep(200);
+
+                    gpio_pin_set_raw(gpio1_dev, 2, 1); /* OFF */
+                    gpio_pin_set_raw(gpio1_dev, 6, 1);
+                    gpio_pin_set_raw(gpio1_dev, 4, 1);
+                    gpio_pin_set_raw(gpio1_dev, 15, 1);
+                    gpio_pin_set_raw(gpio1_dev, 7, 1);
+                    gpio_pin_set_raw(gpio0_dev, 31, 1);
+                    if (pwm_is_ready_dt(&pwm_led)) {
+                        pwm_set_pulse_dt(&pwm_led, 0); /* Power LED OFF */
+                    }
+                    k_msleep(200);
+                }
+
+                /* Cut off 5V Boost (P0.12) */
+                gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
+                gpio_pin_set(gpio0_dev, 12, 0);
+
+                /* Go to System OFF */
+                sys_poweroff();
+            }
+        } else {
+            pwr_press_ticks = 0;
+        }
+
         /* ---- Battery Critical Shutdown (<3.4V / <2% SoC) ---- */
         /* Use Nordic HAL for VBUS detection (safe, no raw register access) */
         #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
@@ -225,6 +271,9 @@ static int status_leds_init(void)
     if (!device_is_ready(gpio0_dev) || !device_is_ready(gpio1_dev)) {
         return -ENODEV;
     }
+
+    /* Configure PWRSWITCH (P1.11) as input pull-up for safety */
+    gpio_pin_configure(gpio1_dev, 11, GPIO_INPUT | GPIO_PULL_UP);
 
     /* Seed state from current ZMK values */
     bt_connected  = zmk_ble_active_profile_is_connected();
