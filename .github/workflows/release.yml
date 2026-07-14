@@ -1,0 +1,33 @@
+name: Release ZMK Firmware
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers when you push any version tag like v1.1, v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@main
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.uf2
+            artifacts/**/*.bin
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
