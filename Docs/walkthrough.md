@@ -52,3 +52,31 @@ This walkthrough details the structural changes, config updates, encoding correc
 - **DTS and Kconfig Dependency Verification**: Confirmed that the ADC and USBD nodes are now enabled, ensuring that the SAADC driver is correctly built and mapped to the battery sensor, and the ZMK USB device stack is successfully compiled.
 - **Header Resolution Verification**: Confirmed that driver files under `module/` now have proper access to application include paths during compilation.
 - **Devicetree Bindings Scope Verification**: Verified that custom DTS binding structures (such as `gpio-ps2` and `zmk,input-mouse-ps2`) are correctly mapped and identified by the Devicetree parser, resulting in correct dependency ordinal output in generated build headers.
+
+---
+
+## V1.01 Release - ZMK Studio Layouts, Battery Protection Cutoff, and Idle State Power-down
+
+This release introduces critical battery protection improvements, ZMK Studio physical layouts support, and idle state power optimization.
+
+### Changes Made
+
+#### 1. ZMK Studio HWMv2 Layout Support
+- **[NEW] [thinkpad_wireless-layouts.dtsi](file:///e:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless-layouts.dtsi)**: Created a dedicated layouts file describing a compliant zmk,physical-layout node with 	ransform and kscan parameters mapped to satisfy ZMK Studio keymap editing expectations.
+- **[MODIFY] [thinkpad_wireless.dts](file:///e:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts)**: Included 	hinkpad_wireless-layouts.dtsi and registered zmk,physical-layout = &physical_layout0; inside the chosen block to meet ZMK HWMv2 physical layout bindings requirements.
+
+#### 2. Battery Protection Cutoff & Idle Power Savings
+- **[MODIFY] [status_leds.c](file:///e:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/boards/thinkpad/thinkpad_wireless/status_leds.c)**:
+  - **5V Boost Cutoff on Shutdown**: In the battery critical low-voltage detection routine, explicitly configured and pulled P0.12 (5V_EN) low before invoking sys_poweroff(). This forces the ETA1061 regulator to shutdown, ensuring that the TrackPoint is powered off and preventing battery over-discharge damage during shutdown.
+  - **Idle State LED Control**: Subscribed to the zmk_activity_state_changed event and checked ZMK activity state. When entering ZMK_ACTIVITY_IDLE or ZMK_ACTIVITY_SLEEP, force the BT_LED (and battery indicator LEDs when on battery) off to satisfy the PRD requirement to dim all indicator LEDs except the power breathing LED during idle.
+
+#### 3. Code Quality & Namespace Compliance
+- **[MODIFY] [behavior_mouse_setting.c](file:///e:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/drivers/behavior_mouse_setting.c)**: Updated legacy include #include <drivers/behavior.h> to modern namespace #include <zephyr/drivers/behavior.h> in accordance with the project rules.
+
+---
+
+## V1.01 Validation Results
+- **Compile Verification**: Confirmed that the workspace compiles without warnings or errors.
+- **GPIO Functionality Verification**: Verified the P0.12 control call is successfully generated in assembly/driver.
+- **Activity State Mapping**: Event subscriptions for activity state transitions are registered and updated asynchronously in the LED thread.
+- **Git Sync Status**: Staged, committed, and successfully pushed to remote branch zmk-official-hwmv2-fix.
