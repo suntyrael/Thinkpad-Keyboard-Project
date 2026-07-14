@@ -27,6 +27,7 @@ jobs:
           files: |
             artifacts/**/*.uf2
             artifacts/**/*.bin
+            artifacts/**/*.hex
           draft: false
           prerelease: false
         env:
