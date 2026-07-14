@@ -179,3 +179,15 @@
 
 ### [2026-07-10] v1.0.17 — 修复 USBD 禁用导致的 USB 协议栈链接未定义引用报错
 1. **显式启用 USBD 外设节点**：在 `thinkpad_wireless.dts` 设备树中显式追加并启用了 `&usbd` 节点（`status = "okay"`）。在 Zephyr/ZMK 构建下，由于默认的 `nrf52840.dtsi` 中 `usbd` 状态为 `"disabled"` 且未在板级 DTS 中开启，导致 ZMK 的 USB 设备协议栈被关闭。这引发了 ZMK 应用核心逻辑（`indicator_leds.c` 等）在链接阶段报出对 `zmk_usb_get_conn_state` 和 `zmk_event_zmk_usb_conn_state_changed` 的 `undefined reference` 未定义引用报错。使能该物理控制器后解决了该链接错误。
+
+### [2026-07-14] v1.01 (Upgrade) 一 ZMK Studio 物理布局集成、开关机软按键锁定及 LED 顺序点亮动画
+1. **ZMK Studio 物理布局支持 (Physical Layout)**：在物理布局分离文件 `thinkpad_wireless-layouts.dtsi` 中定义了符合 ZMK Studio 可视化键盘编辑器规范的 `zmk,physical-layout` 属性节点，并在板级设备树 `thinkpad_wireless.dts` 的 `chosen` 节点中注册了 `zmk,physical-layout = &physical_layout0;`，使得固件完全兼容最新的 ZMK Studio 键图编辑能力。
+2. **待机功耗指示灯优化**：在 `status_leds.c` 中订阅了 ZMK 的活动状态变化事件 `zmk_activity_state_changed`。当主控检测到键盘进入闲置状态时（`ZMK_ACTIVITY_IDLE` 或 `ZMK_ACTIVITY_SLEEP`），强制关闭蓝牙状态灯（`BT_LED`）与电量指示灯，仅保留主电源 LED 的 PWM 呼吸效果，从而节省待机时的非必要电量。
+3. **紧急关机外设供电切断保护**：在电池极低电压紧急关机代码中，在调用 `sys_poweroff()` 之前，显式将 5V 使能控制引脚 `P0.12` (`5V_EN`) 配置为输出并拉低电平（0V）。这彻底关断了 5V 升压电路（ETA1061），完全切断了小红帽的供电，避免了主控进入 System OFF 后由于引脚悬空导致升压芯片继续工作从而过放电池的重大隐患。
+4. **保留寄存器软开关机锁定与防误触重入休眠**：
+   * **开机校验（长按 2 秒）**：在系统极早期启动阶段（`PRE_KERNEL_2`，`board.c`），若读取到 GPREGRET 寄存器中存有手动关机标志值 `0xAA`，则对 `PWRSWITCH` 按键（`P1.11`）进行长按检测。如果不是按键唤醒（误触）或长按未满 2 秒，主控会在数毫秒内瞬间拉低 `5V_EN` 并重新进入 System OFF，完美防范了在包里因键位受压误触开机的问题。长按满 2 秒则清除标志并闪烁绿色电量灯进行开机指示。
+   * **关机逻辑（长按 8 秒）**：在 LED 线程中监测电源按键状态，长按满 8 秒时在 `NRF_POWER->GPREGRET` 写入手动关机标志 `0xAA`，随后熄灭所有外设供电并进入 System OFF。
+5. **开关机 LED 动画设计**：
+   * **开机**：长按开机成功后，所有指示灯（BT灯、绿/红电量灯、静音灯、麦克风静音灯、Caps Lock灯）呈 150ms 间隔顺序点亮，并在全亮 300ms 后全部熄灭，交由 ZMK 系统正常控制。
+   * **关机**：长按关机触发后，所有指示灯同时常亮 300ms 作为警示，随后呈 150ms 间隔顺序熄灭。
+6. **过时头文件引用规范清理**：在驱动文件 `behavior_mouse_setting.c` 中将过时的 `#include <drivers/behavior.h>` 更新为现代命名空间风格的 `#include <zephyr/drivers/behavior.h>`。
