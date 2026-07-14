@@ -77,13 +77,30 @@ static int board_gpio_init(void)
         /* Power On success: clear manual power off flag */
         NRF_POWER->GPREGRET = 0;
 
-        /* Flash Green Battery LED (P1.04) 3 times for power-on indication */
-        for (int i = 0; i < 3; i++) {
-            gpio_pin_set_raw(gpio1_dev, 4, 0); /* ON */
-            k_busy_wait(200000);
-            gpio_pin_set_raw(gpio1_dev, 4, 1); /* OFF */
-            k_busy_wait(200000);
-        }
+        /* Configure Caps Lock LED (P0.31) as output high for sequencing */
+        gpio_pin_configure(gpio0_dev, 31, GPIO_OUTPUT_HIGH);
+
+        /* Sequential turn-on: BT, Green, Red, Mic Mute, Mute, Caps Lock */
+        gpio_pin_set_raw(gpio1_dev, 2, 0);   /* BT ON */
+        k_busy_wait(150000);
+        gpio_pin_set_raw(gpio1_dev, 4, 0);   /* Battery Green ON */
+        k_busy_wait(150000);
+        gpio_pin_set_raw(gpio1_dev, 6, 0);   /* Battery Red ON */
+        k_busy_wait(150000);
+        gpio_pin_set_raw(gpio1_dev, 7, 0);   /* Mic Mute ON */
+        k_busy_wait(150000);
+        gpio_pin_set_raw(gpio1_dev, 15, 0);  /* Mute ON */
+        k_busy_wait(150000);
+        gpio_pin_set_raw(gpio0_dev, 31, 0);  /* Caps Lock ON */
+        k_busy_wait(300000);
+
+        /* Turn all OFF */
+        gpio_pin_set_raw(gpio1_dev, 2, 1);
+        gpio_pin_set_raw(gpio1_dev, 4, 1);
+        gpio_pin_set_raw(gpio1_dev, 6, 1);
+        gpio_pin_set_raw(gpio1_dev, 7, 1);
+        gpio_pin_set_raw(gpio1_dev, 15, 1);
+        gpio_pin_set_raw(gpio0_dev, 31, 1);
     }
 
     return 0;

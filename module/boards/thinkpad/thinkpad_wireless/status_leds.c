@@ -92,30 +92,34 @@ static void led_thread_fn(void *a, void *b, void *c)
                 /* Set manual power off flag in GPREGRET */
                 NRF_POWER->GPREGRET = MANUAL_POWER_OFF_FLAG;
 
-                /* Flash all LEDs 3 times */
-                for (int i = 0; i < 3; i++) {
-                    gpio_pin_set_raw(gpio1_dev, 2, 0); /* BT LED ON */
-                    gpio_pin_set_raw(gpio1_dev, 6, 0); /* Battery Red ON */
-                    gpio_pin_set_raw(gpio1_dev, 4, 0); /* Battery Green ON */
-                    gpio_pin_set_raw(gpio1_dev, 15, 0); /* Mute LED ON */
-                    gpio_pin_set_raw(gpio1_dev, 7, 0); /* Mic Mute LED ON */
-                    gpio_pin_set_raw(gpio0_dev, 31, 0); /* Caps Lock LED ON */
-                    if (pwm_is_ready_dt(&pwm_led)) {
-                        pwm_set_pulse_dt(&pwm_led, pwm_led.period); /* Power LED ON */
-                    }
-                    k_msleep(200);
-
-                    gpio_pin_set_raw(gpio1_dev, 2, 1); /* OFF */
-                    gpio_pin_set_raw(gpio1_dev, 6, 1);
-                    gpio_pin_set_raw(gpio1_dev, 4, 1);
-                    gpio_pin_set_raw(gpio1_dev, 15, 1);
-                    gpio_pin_set_raw(gpio1_dev, 7, 1);
-                    gpio_pin_set_raw(gpio0_dev, 31, 1);
-                    if (pwm_is_ready_dt(&pwm_led)) {
-                        pwm_set_pulse_dt(&pwm_led, 0); /* Power LED OFF */
-                    }
-                    k_msleep(200);
+                /* Turn all LEDs ON first */
+                gpio_pin_set_raw(gpio1_dev, 2, 0);   /* BT LED ON */
+                gpio_pin_set_raw(gpio1_dev, 4, 0);   /* Battery Green ON */
+                gpio_pin_set_raw(gpio1_dev, 6, 0);   /* Battery Red ON */
+                gpio_pin_set_raw(gpio1_dev, 7, 0);   /* Mic Mute ON */
+                gpio_pin_set_raw(gpio1_dev, 15, 0);  /* Mute ON */
+                gpio_pin_set_raw(gpio0_dev, 31, 0);  /* Caps Lock ON */
+                if (pwm_is_ready_dt(&pwm_led)) {
+                    pwm_set_pulse_dt(&pwm_led, pwm_led.period); /* Power LED ON */
                 }
+                k_msleep(300);
+
+                /* Sequential turn-off: BT, Green, Red, Mic Mute, Mute, Caps Lock */
+                gpio_pin_set_raw(gpio1_dev, 2, 1);   /* BT OFF */
+                k_msleep(150);
+                gpio_pin_set_raw(gpio1_dev, 4, 1);   /* Battery Green OFF */
+                k_msleep(150);
+                gpio_pin_set_raw(gpio1_dev, 6, 1);   /* Battery Red OFF */
+                k_msleep(150);
+                gpio_pin_set_raw(gpio1_dev, 7, 1);   /* Mic Mute OFF */
+                k_msleep(150);
+                gpio_pin_set_raw(gpio1_dev, 15, 1);  /* Mute OFF */
+                k_msleep(150);
+                gpio_pin_set_raw(gpio0_dev, 31, 1);  /* Caps Lock OFF */
+                if (pwm_is_ready_dt(&pwm_led)) {
+                    pwm_set_pulse_dt(&pwm_led, 0);   /* Power LED OFF */
+                }
+                k_msleep(150);
 
                 /* Cut off 5V Boost (P0.12) */
                 gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
