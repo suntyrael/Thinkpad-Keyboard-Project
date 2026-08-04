@@ -1820,13 +1820,10 @@ int zmk_mouse_ps2_init_power_on_reset() {
 
   if (data->rst_gpio.port == NULL) {
     data->rst_gpio = config->rst_gpio;
-
-    // Overwrite any user-provided flags from the devicetree
-    data->rst_gpio.dt_flags = 0;
   }
 
-  //  Set reset pin low...
-  int err = gpio_pin_configure_dt(&data->rst_gpio, (GPIO_OUTPUT_HIGH));
+  // Set reset pin low (0V) to trigger active-low reset
+  int err = gpio_pin_configure_dt(&data->rst_gpio, GPIO_OUTPUT_LOW);
   if (err) {
     LOG_ERR("Failed Power-On-Reset: Failed to configure RST GPIO pin to "
             "output low (err %d)",
@@ -1837,11 +1834,11 @@ int zmk_mouse_ps2_init_power_on_reset() {
   // Wait 600ms
   k_sleep(MOUSE_PS2_POWER_ON_RESET_TIME);
 
-  // Set pin high
-  err = gpio_pin_set_dt(&data->rst_gpio, 0);
+  // Release reset pin high (3.3V) to let trackpoint start up
+  err = gpio_pin_set_raw(data->rst_gpio.port, data->rst_gpio.pin, 1);
   if (err) {
     LOG_ERR("Failed Power-On-Reset: Failed to set RST GPIO pin to "
-            "low (err %d)",
+            "high (err %d)",
             err);
     return err;
   }
