@@ -1,4 +1,6 @@
 ---
 include:
   - board: thinkpad_wireless
-    snippet: studio-rpc-usb-uart
+    # studio-rpc-usb-uart: ZMK Studio 通过 USB 虚拟串口连接
+    # zmk-usb-logging: 将 ZMK 系统 log 输出到 USB CDC ACM 串口（电脑串口终端可见）
+    snippet: studio-rpc-usb-uart, zmk-usb-logging
