@@ -213,3 +213,11 @@
 3. **预期效果**：
    * GitHub Actions 将产出 `thinkpad_wireless-zmk.uf2`：按住 BOOT 键插入 USB，拖拽即完成烧录（无需调试器）。
    * GitHub Actions 将产出 `thinkpad_wireless-zmk.hex`：Intel HEX 自带 `0x26000` 起始地址，nRF Connect Programmer 按地址写入应用分区，不触碰 `0x0` 保留区与 `0xF4000` 的 bootloader 区。
+
+### [2026-08-04] v1.0.20 — 固件产物收敛为 HEX 格式（关闭 UF2 输出）
+1. **问题背景**：v1.0.19 启用 `CONFIG_BUILD_OUTPUT_UF2=y` 后，GitHub Actions 产物仅包含 `.uf2`。原因：ZMK 官方 `build-user-config.yml` 的产物复制逻辑为 if/elif 二选一——存在 `zmk.uf2` 时只发布 `.uf2`，不会复制 hex/bin。而本项目的烧录方案为 J-Link + nRF Connect Programmer，需要的是 Intel HEX。
+2. **修改点**：
+   * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig`：移除 `CONFIG_BUILD_OUTPUT_UF2=y`，保留 `CONFIG_BUILD_OUTPUT_HEX=y`。
+   * `.github/workflows/build.yml`：向 ZMK 官方 workflow 传入 `fallback_binary: hex`，使无 UF2 产物时发布 `thinkpad_wireless-zmk.hex`。
+   * `.github/workflows/release.yml`：同步传入 `fallback_binary: hex`，保证 tag 发布时 release 资产同样为 `.hex`（release 的 files 匹配模式已含 `*.hex`）。
+3. **预期效果**：CI 与 Release 产物统一为 Intel HEX（起始地址 `0x26000`，nRF Connect Programmer 可直接烧录，注意取消 "Erase all" 以免擦除 bootloader 区）。

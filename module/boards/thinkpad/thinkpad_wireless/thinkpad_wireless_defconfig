@@ -12,8 +12,8 @@ CONFIG_ADC_NRFX_SAADC=y
 # Enable PWM for breathing power LED (hardware requirement)
 CONFIG_PWM=y
 
-# Build output formats: UF2 (drag-and-drop via Adafruit bootloader) and HEX (J-Link/nRF Connect)
-CONFIG_BUILD_OUTPUT_UF2=y
+# Build output format: HEX for J-Link/nRF Connect Programmer flashing
+# (UF2 intentionally disabled; CI publishes HEX via fallback_binary input)
 CONFIG_BUILD_OUTPUT_HEX=y
 
 # PS/2 & Bluetooth Controller Tuning for TrackPoint coexistence
