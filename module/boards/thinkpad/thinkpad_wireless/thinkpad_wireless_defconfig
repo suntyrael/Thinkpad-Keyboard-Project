@@ -9,6 +9,10 @@
 CONFIG_ADC=y
 CONFIG_ADC_NRFX_SAADC=y
 
+# Link application into the devicetree zephyr,code-partition (0x26000),
+# required for the Adafruit nRF52 bootloader layout (missing -> links at 0x0)
+CONFIG_USE_DT_CODE_PARTITION=y
+
 # Enable PWM for breathing power LED (hardware requirement)
 CONFIG_PWM=y
 

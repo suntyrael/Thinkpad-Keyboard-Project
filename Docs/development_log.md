@@ -255,3 +255,11 @@
 ### [2026-08-04] v1.0.24 — 修复 layouts.dtsi keys 数组 DTS 语法错误
 1. **编译错误**：`thinkpad_wireless-layouts.dtsi:15: parse error: expected '{', '=', or ';'`。根因：生成的 `keys` 数组首个元素前带前导逗号（`, <&key_physical_attrs ...>`），且属性后缺少赋值符号 `=`。DTS 语法要求：属性 `keys` 后跟 `= <...>`（首元素），续行用 `, <...>` 分隔，最后以 `;` 结束（对照 ZMK 官方 physical-layout 示例，如 tester_pro_micro-layouts.dtsi）。
 2. **修改点**：`module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless-layouts.dtsi` 中首个 keys 元素的 `, <&key_physical_attrs` 改为 `= <&key_physical_attrs`，其余 129 行保持 `, <...>` 不变，130 项总数不变。
+
+### [2026-08-04] v1.0.25 — 修复固件链接地址（补 CONFIG_USE_DT_CODE_PARTITION）
+1. **问题发现**：CI 产出的 `thinkpad_wireless-zmk.hex` 数据从 `0x0` 开始（向量表在 0x0），而非预期的 `0x26000`。对比 ZMK 官方板（nice_nano 的 `nice_nano_2_0_0_defconfig`）发现其包含 `CONFIG_USE_DT_CODE_PARTITION=y`，而本板 defconfig 缺失。
+2. **影响分析**：Zephyr 的 `FLASH_LOAD_OFFSET` 仅在 `CONFIG_USE_DT_CODE_PARTITION=y` 时取 `chosen/zephyr,code-partition` 的地址（0x26000），否则默认为 0。缺失该配置导致**所有历史固件（含 Release v1.1 的 bin）实际链接在 0x0**，与 Adafruit bootloader 的 0x26000 应用偏移布局不兼容：
+   * 此前按 0x26000 偏移转换/烧录的方式放错了位置；
+   * 烧录后 bootloader 跳转 0x26000 的伪应用，代码内部引用 0x0 基址的绝对地址，导致设备无法作为键盘工作（表现为"其他设备"）。
+3. **修改点**：`module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig` 追加 `CONFIG_USE_DT_CODE_PARTITION=y`，使应用链接到 `code_partition`（0x26000），与 ZMK nRF52840 官方板布局一致。
+4. **预期效果**：新构建的 hex 数据起始地址为 0x26000；配合 bootloader（0x0 引导头 + 0xF4000 主体）与完整镜像烧录方案，键盘方可正常启动工作。
