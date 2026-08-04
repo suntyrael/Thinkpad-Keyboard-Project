@@ -11,6 +11,10 @@ permissions:
 jobs:
   build:
     uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@main
+    with:
+      # Publish Intel HEX (no UF2 support on this board): the upstream workflow
+      # falls back to this format when no zmk.uf2 is produced.
+      fallback_binary: hex
 
   release:
     needs: build
