@@ -94,22 +94,22 @@
             ;
 
         col-gpios
-            = <&gpio0 13 GPIO_ACTIVE_LOW> /* DRV0 AD8 -> P0.13 */
-            , <&gpio0 20 GPIO_ACTIVE_LOW> /* DRV1 AD16 -> P0.20 */
-            , <&gpio0 22 GPIO_ACTIVE_LOW> /* DRV2 AD18 -> P0.22 */
-            , <&gpio0 24 GPIO_ACTIVE_LOW> /* DRV3 AD20 -> P0.24 */
-            , <&gpio1 1  GPIO_ACTIVE_LOW> /* DRV4 Y23 -> P1.01 */
-            , <&gpio0 25 GPIO_ACTIVE_LOW> /* DRV5 AC21 -> P0.25 */
-            , <&gpio1 0  GPIO_ACTIVE_LOW> /* DRV6 AD22 -> P1.00 */
-            , <&gpio0 21 GPIO_ACTIVE_LOW> /* DRV7 AC17 -> P0.21 */
-            , <&gpio0 23 GPIO_ACTIVE_LOW> /* DRV8 AC19 -> P0.23 */
-            , <&gpio0 16 GPIO_ACTIVE_LOW> /* DRV9 AC11 -> P0.16 */
-            , <&gpio0 19 GPIO_ACTIVE_LOW> /* DRV10 AC15 -> P0.19 */
-            , <&gpio0 15 GPIO_ACTIVE_LOW> /* DRV11 AD10 -> P0.15 */
-            , <&gpio0 14 GPIO_ACTIVE_LOW> /* DRV12 AC9 -> P0.14 */
-            , <&gpio1 5  GPIO_ACTIVE_LOW> /* DRV13 T23 -> P1.05 */
-            , <&gpio0 17 GPIO_ACTIVE_LOW> /* DRV14 AD12 -> P0.17 */
-            , <&gpio1 3  GPIO_ACTIVE_LOW> /* DRV15 V23 -> P1.03 */
+            = <&gpio0 13 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV0 AD8 -> P0.13 */
+            , <&gpio0 20 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV1 AD16 -> P0.20 */
+            , <&gpio0 22 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV2 AD18 -> P0.22 */
+            , <&gpio0 24 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV3 AD20 -> P0.24 */
+            , <&gpio1 1  (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV4 Y23 -> P1.01 */
+            , <&gpio0 25 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV5 AC21 -> P0.25 */
+            , <&gpio1 0  (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV6 AD22 -> P1.00 */
+            , <&gpio0 21 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV7 AC17 -> P0.21 */
+            , <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV8 AC19 -> P0.23 */
+            , <&gpio0 16 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV9 AC11 -> P0.16 */
+            , <&gpio0 19 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV10 AC15 -> P0.19 */
+            , <&gpio0 15 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV11 AD10 -> P0.15 */
+            , <&gpio0 14 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV12 AC9 -> P0.14 */
+            , <&gpio1 5  (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV13 T23 -> P1.05 */
+            , <&gpio0 17 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV14 AD12 -> P0.17 */
+            , <&gpio1 3  (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)> /* DRV15 V23 -> P1.03 */
             ;
     };
 
