@@ -242,3 +242,12 @@
    * 输出切换：ZMK 默认 USB 优先，USB 断开自动切 BLE。
 4. **暂缓项**：按用户要求暂不在 keymap 中绑定 `&studio_unlock` 解锁键。注意：ZMK Studio 默认锁定（`ZMK_STUDIO_LOCKING`），未解锁前 Studio 可连接但不可编辑键位；后续需要时在 keymap 绑定 `&studio_unlock` 行为即可解锁。
 5. **遗留待办**：physical-layout 节点尚无 `keys` 属性（键位物理坐标），ZMK Studio 可视化编辑可能受限，后续需在 `thinkpad_wireless-layouts.dtsi` 补充。
+
+### [2026-08-04] v1.0.23 — 修复 ZMK Studio 编译失败（移除 matrix-transform chosen + 补全 physical-layout keys）
+1. **编译错误现象**：启用 `CONFIG_ZMK_STUDIO` 后构建失败。根因是 ZMK 源码 `app/src/physical_layouts.c` 的两处编译期断言：
+   * `BUILD_ASSERT(!IS_ENABLED(CONFIG_ZMK_STUDIO) || USE_PHY_LAYOUTS, ...)`：`USE_PHY_LAYOUTS = 有 zmk,physical-layout 节点 && !DT_HAS_CHOSEN(zmk_matrix_transform)`。板级 `chosen` 中保留了 `zmk,matrix-transform = &default_transform;`，触发断言失败。ZMK Studio 要求键盘以 physical layout 为唯一布局来源，不得再指定 chosen matrix-transform。
+   * `BUILD_ASSERT(!IS_ENABLED(CONFIG_ZMK_STUDIO) || DT_INST_NODE_HAS_PROP(n, keys), ...)`：physical layout 节点必须定义 `keys` 属性（每个键的物理尺寸/坐标），原 `thinkpad_wireless-layouts.dtsi` 仅有 transform/kscan，无 keys。
+2. **修改点**：
+   * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：从 `chosen` 移除 `zmk,matrix-transform = &default_transform;`（`default_transform` 节点保留，由 physical layout 的 `transform` 属性引用）。
+   * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless-layouts.dtsi`：`#include <physical_layouts.dtsi>` 引入 `&key_physical_attrs` 节点，并按 transform map 的 130 个 position 顺序定义 `keys` 数组（width/height/x/y，单位 1U=100），键位语义与 `config/thinkpad_wireless.keymap` 绑定顺序一一对应（Esc/F 行、数字行、Tab 行、Caps 行、Shift 行、底行、媒体行、direct 键）。
+3. **说明**：keymap 文件仅包含键值绑定（无物理坐标）；物理矩阵（RC→position）定义于 dts 的 `default_transform`，physical layout 的 keys 顺序与之一致。键位坐标按 X220 经典 7 行布局近似排布，后续可在 Studio 可视化界面微调。
