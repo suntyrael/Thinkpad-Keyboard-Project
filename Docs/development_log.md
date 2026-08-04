@@ -221,3 +221,12 @@
    * `.github/workflows/build.yml`：向 ZMK 官方 workflow 传入 `fallback_binary: hex`，使无 UF2 产物时发布 `thinkpad_wireless-zmk.hex`。
    * `.github/workflows/release.yml`：同步传入 `fallback_binary: hex`，保证 tag 发布时 release 资产同样为 `.hex`（release 的 files 匹配模式已含 `*.hex`）。
 3. **预期效果**：CI 与 Release 产物统一为 Intel HEX（起始地址 `0x26000`，nRF Connect Programmer 可直接烧录，注意取消 "Erase all" 以免擦除 bootloader 区）。
+
+### [2026-08-04] v1.0.21 — 启用 USB HID 有线输出（修复 Windows 识别为"其他设备"）
+1. **问题背景**：烧录完整镜像（bootloader + 应用）后连接电脑，Windows 将设备识别为"其他设备"且无法安装驱动，键盘无法作为有线 HID 键盘使用。排查发现固件**从未启用 USB HID 输出**：
+   * `config/thinkpad_wireless.conf` 缺少 `CONFIG_ZMK_USB=y`。ZMK 中 USB 为显式开关，该配置会 `select USB` / `select USB_DEVICE_STACK` / `select USB_DEVICE_HID`；未启用时应用固件不包含 HID 键盘接口，USB 枚举无有效接口描述符。
+   * `thinkpad_wireless.dts` 的 `chosen` 缺少 `zephyr_udc0` 标签（等价于 `chosen { zephyr,udc0 = &usbd; };`），Zephyr 的 `usb_enable()` 无法定位 USB 设备控制器。对比 ZMK 官方参考板（nice_nano）均有 `zephyr_udc0: &usbd { status = "okay"; };`。
+2. **修改点**：
+   * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：将裸 `&usbd` 节点改为 `zephyr_udc0: &usbd`（注册为 Zephyr USB 设备控制器 chosen）。
+   * `config/thinkpad_wireless.conf`：追加 `CONFIG_ZMK_USB=y`。VID/PID（0x1D50:0x615E）与厂商名 "ZMK Project" 采用 ZMK 默认值，无需另行配置。
+3. **预期效果**：固件枚举出标准 USB HID 键盘接口，Windows/macOS/Linux 免驱即插即用；`status_leds.c` 中的 `zmk_usb_is_powered()` 在 USB 接入时正确上报 VBUS 状态（充电指示灯逻辑生效）。
