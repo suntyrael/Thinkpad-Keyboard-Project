@@ -200,3 +200,16 @@
 2. **修复 Cppcheck 发现的代码 bug**：
    * **修复错误捕获失效漏洞**：在 [input_mouse_ps2.c](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/drivers/input_mouse_ps2.c) 的 `zmk_mouse_ps2_init_thread` 线程初始化逻辑中，修复了调用 `zmk_mouse_ps2_set_sampling_rate` 但未将其返回值赋值给 `err` 变量的逻辑 Bug（导致后面的错误检测无效化），修正为 `err = zmk_mouse_ps2_set_sampling_rate(...)`。
    * **修复 printf 格式不匹配与 typo 警报**：在 [input_mouse_ps2.c](file:///E:/Work/个人文档/业余研究/Thinkpad keyboard wireless/module/drivers/input_mouse_ps2.c) 的 `zmk_mouse_ps2_send_cmd` 函数中，修正了 size_t 类型的 `sizeof` 打印时未匹配 `%zu` 格式字符的警告，并修正了拷贝粘贴导致的 typo 笔误（应打印限制缓冲区的大小 `sizeof(resp.resp_buffer)`，而非 `sizeof(resp.err_msg)`）。
+### [2026-08-04] v1.0.19 — 构建产物格式修复（启用 UF2/HEX 输出，解决烧录兼容问题）
+1. **问题背景**：Release v1.1 的固件资产仅有 `thinkpad_wireless-zmk.bin`（raw binary），无法被 nRF Connect for Desktop 直接烧录。原因有二：
+   * ZMK 官方 CI 流程（`build-user-config.yml`）的产物逻辑为：若构建目录存在 `zephyr.uf2` 则发布 `.uf2`，否则 fallback 发布 `.bin`。本板 defconfig 未启用 UF2 输出，故只产出了 `.bin`。
+   * raw binary 不含地址信息，nRF Connect Programmer 加载时默认按 `0x0000` 起始烧录，会覆盖 `0x0-0x26000` 区域的 Adafruit bootloader 向量表头，导致芯片上电后既无法进入 bootloader 也无法启动应用（变砖）。手工改名 .hex 无效（文件内容格式未变）。
+2. **修改点**：在 `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig` 中追加：
+   ```kconfig
+   CONFIG_BUILD_OUTPUT_UF2=y
+   CONFIG_BUILD_OUTPUT_HEX=y
+   ```
+   与 ZMK 官方 nRF52840 参考板（如 nice_nano）的 defconfig 保持一致。
+3. **预期效果**：
+   * GitHub Actions 将产出 `thinkpad_wireless-zmk.uf2`：按住 BOOT 键插入 USB，拖拽即完成烧录（无需调试器）。
+   * GitHub Actions 将产出 `thinkpad_wireless-zmk.hex`：Intel HEX 自带 `0x26000` 起始地址，nRF Connect Programmer 按地址写入应用分区，不触碰 `0x0` 保留区与 `0xF4000` 的 bootloader 区。
