@@ -230,3 +230,15 @@
    * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：将裸 `&usbd` 节点改为 `zephyr_udc0: &usbd`（注册为 Zephyr USB 设备控制器 chosen）。
    * `config/thinkpad_wireless.conf`：追加 `CONFIG_ZMK_USB=y`。VID/PID（0x1D50:0x615E）与厂商名 "ZMK Project" 采用 ZMK 默认值，无需另行配置。
 3. **预期效果**：固件枚举出标准 USB HID 键盘接口，Windows/macOS/Linux 免驱即插即用；`status_leds.c` 中的 `zmk_usb_is_powered()` 在 USB 接入时正确上报 VBUS 状态（充电指示灯逻辑生效）。
+
+### [2026-08-04] v1.0.22 — 启用 ZMK Studio（USB CDC + BLE 双传输通道，暂不加解锁键）
+1. **问题背景**：用户在 https://zmk.studio/ 无法连接设备。原因：固件未编译 ZMK Studio 支持（`CONFIG_ZMK_STUDIO` 未启用），且缺少 USB CDC-ACM 传输端点。
+2. **修改点**：
+   * `config/thinkpad_wireless.conf`：追加 `CONFIG_ZMK_STUDIO=y`。BLE GATT 传输（`ZMK_STUDIO_TRANSPORT_BLE`）随 ZMK_BLE 自动启用；RPC 自动引入 `ZMK_BEHAVIOR_METADATA`、`ZMK_KEYMAP_SETTINGS_STORAGE` 等依赖。
+   * `build.yaml`：为 `thinkpad_wireless` 板添加官方 `studio-rpc-usb-uart` snippet。该 snippet 自动完成：在 `&zephyr_udc0`（v1.0.21 已注册）下挂载 `zephyr,cdc-acm-uart` 节点、写入 `chosen { zmk,studio-rpc-uart = ...; }`、启用 `CONFIG_USB_CDC_ACM` / `SERIAL` / `UART_INTERRUPT_DRIVEN` / `UART_LINE_CTRL`，并定义 `ZMK_BEHAVIORS_KEEP_ALL` 使全部行为可用。
+3. **传输通道汇总**：
+   * **USB**：HID 键盘接口（v1.0.21）+ CDC-ACM 串口（Studio RPC）。
+   * **蓝牙**：HID over GATT + Studio GATT RPC。
+   * 输出切换：ZMK 默认 USB 优先，USB 断开自动切 BLE。
+4. **暂缓项**：按用户要求暂不在 keymap 中绑定 `&studio_unlock` 解锁键。注意：ZMK Studio 默认锁定（`ZMK_STUDIO_LOCKING`），未解锁前 Studio 可连接但不可编辑键位；后续需要时在 keymap 绑定 `&studio_unlock` 行为即可解锁。
+5. **遗留待办**：physical-layout 节点尚无 `keys` 属性（键位物理坐标），ZMK Studio 可视化编辑可能受限，后续需在 `thinkpad_wireless-layouts.dtsi` 补充。
