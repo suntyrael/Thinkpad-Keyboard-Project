@@ -20,17 +20,23 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
+          name: firmware
           path: artifacts
+      - name: Create Full Image
+        run: |
+          python3 tools/merge_hex.py \
+            artifacts/thinkpad_full_0x0000.hex \
+            firmware/adafruit_bootloader_nosd.hex \
+            artifacts/thinkpad_wireless-zmk.hex
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/*.uf2
-            artifacts/**/*.bin
             artifacts/**/*.hex
           draft: false
           prerelease: false

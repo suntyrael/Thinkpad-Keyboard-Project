@@ -263,3 +263,12 @@
    * 烧录后 bootloader 跳转 0x26000 的伪应用，代码内部引用 0x0 基址的绝对地址，导致设备无法作为键盘工作（表现为"其他设备"）。
 3. **修改点**：`module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless_defconfig` 追加 `CONFIG_USE_DT_CODE_PARTITION=y`，使应用链接到 `code_partition`（0x26000），与 ZMK nRF52840 官方板布局一致。
 4. **预期效果**：新构建的 hex 数据起始地址为 0x26000；配合 bootloader（0x0 引导头 + 0xF4000 主体）与完整镜像烧录方案，键盘方可正常启动工作。
+
+### [2026-08-04] v1.0.26 — GitHub Actions 产出完整烧录镜像（bootloader + 应用合并）
+1. **需求**：CI 产物（`thinkpad_wireless-zmk.hex`）仅为应用固件，不含 bootloader；要求 Actions 直接生成可一步全片烧录的完整镜像。
+2. **修改点**：
+   * 新增 `tools/merge_hex.py`：通用 Intel HEX 合并脚本（支持 type 02/04 地址记录、跨 64KB 边界、UICR 区域，自动检测地址重叠）。用法：`python3 tools/merge_hex.py <输出> <输入1> <输入2> ...`。
+   * 新增 `firmware/adafruit_bootloader_nosd.hex`：Adafruit nRF52 Bootloader（ZMK 变体、无 softdevice，应用偏移 0x26000），来源 joric/nrfmicro release 1.4（`nrfmicro_nrf52840_bootloader-0.8.0-dirty_nosd.hex`），附 `firmware/README.md` 说明来源与覆盖区域。
+   * `.github/workflows/build.yml`：新增 `create-full-image` job（依赖官方 build），下载应用 hex 后合并 bootloader 与应用，产出 `firmware-full` artifact（`thinkpad_full_0x0000.hex`，覆盖 0x0 起完整布局）。
+   * `.github/workflows/release.yml`：release job 中合并完整镜像，release 资产包含 `thinkpad_full_0x0000.hex` 与 `thinkpad_wireless-zmk.hex`。
+3. **烧录说明**：完整镜像用于全片重建（nRF Connect Programmer 勾选 "Erase all"）；应用 hex 用于仅更新应用（不擦除，bootloader 保留）。

@@ -24,3 +24,26 @@ jobs:
       # Publish Intel HEX (no UF2 support on this board): the upstream workflow
       # falls back to this format when no zmk.uf2 is produced.
       fallback_binary: hex
+
+  # Generate a full flash image (bootloader + application) for one-step flashing
+  create-full-image:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download App Firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: fw
+      - name: Merge Bootloader + Application
+        run: |
+          python3 tools/merge_hex.py \
+            fw/thinkpad_full_0x0000.hex \
+            firmware/adafruit_bootloader_nosd.hex \
+            fw/thinkpad_wireless-zmk.hex
+      - name: Upload Full Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-full
+          path: fw/thinkpad_full_0x0000.hex
