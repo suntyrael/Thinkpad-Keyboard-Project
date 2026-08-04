@@ -7,6 +7,7 @@ on:
       - "build.yaml"
       - "config/**"
       - "module/**"
+      - "tools/**"
       - "zephyr/**"
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - "build.yaml"
       - "config/**"
       - "module/**"
+      - "tools/**"
       - "zephyr/**"
   workflow_dispatch:
 
