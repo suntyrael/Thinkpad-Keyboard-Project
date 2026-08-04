@@ -65,7 +65,8 @@ def write_hex(data, out_path, rec_len=32):
             if cur_base != b:
                 emit_base(b)
                 cur_base = b
-            chunk = min(rec_len, e - pos)
+            next_boundary = cur_base + 0x10000
+            chunk = min(rec_len, e - pos, next_boundary - pos)
             payload = bytes(data[p] for p in range(pos, pos + chunk))
             emit(pos - cur_base, payload)
             pos += chunk
