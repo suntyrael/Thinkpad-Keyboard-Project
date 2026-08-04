@@ -272,3 +272,15 @@
    * `.github/workflows/build.yml`：新增 `create-full-image` job（依赖官方 build），下载应用 hex 后合并 bootloader 与应用，产出 `firmware-full` artifact（`thinkpad_full_0x0000.hex`，覆盖 0x0 起完整布局）。
    * `.github/workflows/release.yml`：release job 中合并完整镜像，release 资产包含 `thinkpad_full_0x0000.hex` 与 `thinkpad_wireless-zmk.hex`。
 3. **烧录说明**：完整镜像用于全片重建（nRF Connect Programmer 勾选 "Erase all"）；应用 hex 用于仅更新应用（不擦除，bootloader 保留）。
+
+### [2026-08-04] v1.0.27 — 更换为 ZMK 布局 bootloader（修复上电停留在 DFU 模式）
+1. **问题现象**：烧录完整镜像后，插入 USB 弹出 nRFmicro 升级盘（bootloader DFU 模式），无键盘/鼠标设备，ZMK Studio 连接 COM 失败。
+2. **根因分析**（通过反汇编对比两个 bootloader 的 DFU_BANK_0_REGION_START 常量）：
+   * `DFU_BANK_0_REGION_START = CODE_REGION_1_START = is_sd_existed() ? SD_SIZE_GET(MBR_SIZE) : MBR_SIZE`。
+   * 原使用的 **nrfmicro nosd 变体**（`nrfmicro_nrf52840_bootloader-0.8.0-dirty_nosd.hex`）代码中**无 0x26000 常量**：无 SoftDevice 时应用起始地址为 **MBR_SIZE=0x1000**，与 ZMK 的 0x26000 布局不兼容 → `bootloader_app_is_valid()` 判定 0x26000 的应用无效 → 停留 DFU 弹升级盘。
+   * **nice_nano bootloader 0.6.0**（`nice_nano_bootloader-0.6.0_s140_6.1.1.hex`）代码中含 0x26000 常量（0x1384/0x3008/0x2577C/0x257FC），且 hex 内置 SoftDevice（0x1000-0x25DE8）→ bootloader 检测到 SD → 应用地址正确指向 0x26000。
+3. **修改点**：
+   * `firmware/adafruit_bootloader_nosd.hex`（废弃，删除）→ 新增 `firmware/adafruit_bootloader_zmk.hex`（nice_nano 0.6.0 s140 版，ZMK 布局）。
+   * `.github/workflows/build.yml`、`.github/workflows/release.yml`：bootloader 引用更新为 `firmware/adafruit_bootloader_zmk.hex`。
+   * `firmware/README.md`：更新来源说明，并注明勿用 nrfmicro nosd 变体。
+4. **预期效果**：完整镜像 = bootloader 引导头（0x0）+ SoftDevice（0x1000-0x26000）+ ZMK 应用（0x26000）+ bootloader 主体（0xF4000）+ UICR；bootloader 校验通过后跳转应用，键盘正常启动。

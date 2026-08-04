@@ -30,7 +30,7 @@ jobs:
         run: |
           python3 tools/merge_hex.py \
             artifacts/thinkpad_full_0x0000.hex \
-            firmware/adafruit_bootloader_nosd.hex \
+            firmware/adafruit_bootloader_zmk.hex \
             artifacts/thinkpad_wireless-zmk.hex
 
       - name: Create GitHub Release
