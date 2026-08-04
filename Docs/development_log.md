@@ -251,3 +251,7 @@
    * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：从 `chosen` 移除 `zmk,matrix-transform = &default_transform;`（`default_transform` 节点保留，由 physical layout 的 `transform` 属性引用）。
    * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless-layouts.dtsi`：`#include <physical_layouts.dtsi>` 引入 `&key_physical_attrs` 节点，并按 transform map 的 130 个 position 顺序定义 `keys` 数组（width/height/x/y，单位 1U=100），键位语义与 `config/thinkpad_wireless.keymap` 绑定顺序一一对应（Esc/F 行、数字行、Tab 行、Caps 行、Shift 行、底行、媒体行、direct 键）。
 3. **说明**：keymap 文件仅包含键值绑定（无物理坐标）；物理矩阵（RC→position）定义于 dts 的 `default_transform`，physical layout 的 keys 顺序与之一致。键位坐标按 X220 经典 7 行布局近似排布，后续可在 Studio 可视化界面微调。
+
+### [2026-08-04] v1.0.24 — 修复 layouts.dtsi keys 数组 DTS 语法错误
+1. **编译错误**：`thinkpad_wireless-layouts.dtsi:15: parse error: expected '{', '=', or ';'`。根因：生成的 `keys` 数组首个元素前带前导逗号（`, <&key_physical_attrs ...>`），且属性后缺少赋值符号 `=`。DTS 语法要求：属性 `keys` 后跟 `= <...>`（首元素），续行用 `, <...>` 分隔，最后以 `;` 结束（对照 ZMK 官方 physical-layout 示例，如 tester_pro_micro-layouts.dtsi）。
+2. **修改点**：`module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless-layouts.dtsi` 中首个 keys 元素的 `, <&key_physical_attrs` 改为 `= <&key_physical_attrs`，其余 129 行保持 `, <...>` 不变，130 项总数不变。
