@@ -294,3 +294,24 @@
    * `.github/workflows/build.yml`、`.github/workflows/release.yml`：完整镜像合并命令追加 `--mark-app-valid`。
    * `firmware/README.md`：补充烧录说明。
 3. **烧录注意事项**：完整镜像烧录须勾选 "Erase all"（擦除 settings 页后再写入标记，flash 仅支持 1→0 写入）。
+
+### [2026-08-05] v1.0.29 — 键盘矩阵 KSCAN 引脚极性与开漏扫描逻辑修正（匹配 X220 原理图）
+1. **问题现象**：启动后键盘无响应，或全盘键位在无任何按压时产生大量 `pressed: true` 幽灵误触发；修正引脚上拉后出现仅键盘右侧少数按键有响应、左侧及中部大部分按键无响应的现象。
+2. **根因分析**：
+   * 原 DTS 中配置为 `diode-direction = "col2row";` 且 `row-gpios` 设为下拉 `(GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)`。ThinkPad X220 官方主板原理图中，SENSE (行脚) 硬件上拉至 3.3V，二极管阳极在 SENSE 侧，导致高电平驱动被二极管反向截止。
+   * 当将 `row-gpios` 改为上拉 `(GPIO_ACTIVE_LOW | GPIO_PULL_UP)` 后，若错误地将 `diode-direction` 改为 `"row2col"`，ZMK 会把 `col-gpios` 拿去当作输入脚 (Inputs) 读取。而 `col-gpios` 悬空 (Floating) 导致上电电平被 `GPIO_ACTIVE_LOW` 误判为全盘被按压。
+   * 当保持 `diode-direction = "col2row"` 且 `col-gpios` 设为推挽输出时，未被扫描的 15 列在主动输出 3.3V 高电平，高电平电流通过内部线路倒灌至 SENSE 线上，导致 SENSE 线的电压无法被目标扫描列拉低至 0.9V 逻辑低电平门限以下（表现为仅右侧少数列正常，左侧大部分按键无响应）。
+3. **修改点**：
+   * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：
+     - `matrix_kscan` 保持 `diode-direction = "col2row";`（保证 Row 为 SENSE 输入、Col 为 DRV 输出）；
+     - `row-gpios` 配置为 **`(GPIO_ACTIVE_LOW | GPIO_PULL_UP)`**（3.3V 上拉输入，低电平有效）；
+     - `col-gpios` 配置为 **`(GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)`**（开漏驱动模式，扫描时拉低，未选中时高阻抗抗倒灌）。
+4. **验证效果**：矩阵扫描完全正常，全键盘键位（QWERTY 字母、数字行、功能键等）按下与释放均可精准响应。
+
+### [2026-08-05] v1.0.30 — PS/2 指点杆 (TrackPoint) 低电平复位逻辑修复（解决 Reset 锁死 0.2V 问题）
+1. **问题现象**：串口频繁报错 `ps2_gpio: Failed to write value 0xff at pos=1: scl timeout`，用万用表实测 `TP4_RESET` (P1.09) 引脚电压仅有 0.2V。
+2. **根因分析**：在 `module/drivers/input_mouse_ps2.c` 的 `zmk_mouse_ps2_init_power_on_reset` 函数中，代码清除了设备树标志 (`data->rst_gpio.dt_flags = 0;`)，并在 600ms 复位延时结束后误调用 `gpio_pin_set_dt(&data->rst_gpio, 0)` 将 P1.09 强行锁死在低电平 0V (实际测到 0.2V)。指点杆模块为低电平复位 (Active Low Reset)，复位完成后需要维持在 **3.3V 高电平**才能正常启动。引脚被永久锁死在 0.2V 导致小红帽芯片被一直按在强制复位状态，无法响应任何 PS/2 时钟和数据信号。
+3. **修改点**：
+   * `module/drivers/input_mouse_ps2.c`：修正 `zmk_mouse_ps2_init_power_on_reset`，移除强行清零 `dt_flags` 的逻辑；上电复位开始时输出 0V (LOW) 维持 600ms 脉冲，复位结束后通过 `gpio_pin_set_raw(data->rst_gpio.port, data->rst_gpio.pin, 1)` 释放并保持为 **3.3V 高电平 (HIGH)**。
+4. **验证效果**：P1.09 顺利恢复为 3.3V 高电平，指点杆芯片正常退出复位模式。
+
