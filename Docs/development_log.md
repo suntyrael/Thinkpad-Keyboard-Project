@@ -284,3 +284,13 @@
    * `.github/workflows/build.yml`、`.github/workflows/release.yml`：bootloader 引用更新为 `firmware/adafruit_bootloader_zmk.hex`。
    * `firmware/README.md`：更新来源说明，并注明勿用 nrfmicro nosd 变体。
 4. **预期效果**：完整镜像 = bootloader 引导头（0x0）+ SoftDevice（0x1000-0x26000）+ ZMK 应用（0x26000）+ bootloader 主体（0xF4000）+ UICR；bootloader 校验通过后跳转应用，键盘正常启动。
+
+### [2026-08-04] v1.0.28 — 完整镜像自动写入 bootloader settings 有效标记（解决 J-Link 直烧弹 U盘）
+1. **问题现象（最终根因）**：J-Link 直接烧录完整镜像后，上电弹 U盘（UF2 bootloader 模式，卷标 NICENANO/INFO_UF2.TXT），键盘无法启动。排查链路：
+   * 芯片内容（bootloader + SD + 应用）逐字节正确；MBR、UICR.BOOTSTART（0x10001014=0xF4000）、is_sd_existed（0x3004=0x51B1E5DB）、settings 页（0xFF000=FF）均正常。
+   * 反汇编确认 bootloader 的 `bootloader_app_is_valid()` 走 settings 判定；**J-Link 直烧时 settings 页保持擦除态，缺少 `bank_0 = BANK_VALID_APP` 标记**（正常 UF2 拖拽流程中 bootloader 烧完固件会自动写入该标记）。手动写入 `0xFF000 = 0x0001` 后，bootloader 判定应用有效，键盘/鼠标/ZMK Studio 全部恢复正常。
+2. **修改点**（无需修改任何固件代码，仅镜像生成流程）：
+   * `tools/merge_hex.py`：新增 `--mark-app-valid` 选项，合并完整镜像时在 settings 页（0xFF000）写入 `bank_0 = 0x0001 (BANK_VALID_APP)`、`bank_0_crc = 0x0000`（禁用 CRC 检查）、`bank_0_size = 应用大小`。
+   * `.github/workflows/build.yml`、`.github/workflows/release.yml`：完整镜像合并命令追加 `--mark-app-valid`。
+   * `firmware/README.md`：补充烧录说明。
+3. **烧录注意事项**：完整镜像烧录须勾选 "Erase all"（擦除 settings 页后再写入标记，flash 仅支持 1→0 写入）。

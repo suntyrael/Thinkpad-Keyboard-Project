@@ -31,7 +31,8 @@ jobs:
           python3 tools/merge_hex.py \
             artifacts/thinkpad_full_0x0000.hex \
             firmware/adafruit_bootloader_zmk.hex \
-            artifacts/thinkpad_wireless-zmk.hex
+            artifacts/thinkpad_wireless-zmk.hex \
+            --mark-app-valid
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

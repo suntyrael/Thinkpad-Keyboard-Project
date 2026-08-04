@@ -41,7 +41,8 @@ jobs:
           python3 tools/merge_hex.py \
             fw/thinkpad_full_0x0000.hex \
             firmware/adafruit_bootloader_zmk.hex \
-            fw/thinkpad_wireless-zmk.hex
+            fw/thinkpad_wireless-zmk.hex \
+            --mark-app-valid
       - name: Upload Full Image
         uses: actions/upload-artifact@v4
         with:

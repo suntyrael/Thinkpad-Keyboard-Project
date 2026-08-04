@@ -29,3 +29,13 @@ python3 tools/merge_hex.py output_full.hex \
     firmware/adafruit_bootloader_zmk.hex \
     <应用hex>
 ```
+
+## 烧录注意事项（重要）
+
+1. 完整镜像（`thinkpad_full_0x0000.hex`）烧录时必须勾选 **"Erase all"**。
+2. 完整镜像已通过 `tools/merge_hex.py --mark-app-valid` 在 bootloader settings 页（0xFF000）
+   写入 `bank_0 = BANK_VALID_APP (0x0001)` 标记。**这是 J-Link 直接烧录后能正常启动的关键**——
+   bootloader 依赖该标记判定应用有效；缺失时（settings 页保持擦除态）会判定应用无效并
+   停留在 UF2 模式（弹 U盘）。UF2 拖拽流程会自动写该标记，J-Link 直烧不会。
+3. 若手动烧录旧版完整镜像（无标记），可执行：
+   `nrfutil device write --address 0xFF000 --value 0x00000001`

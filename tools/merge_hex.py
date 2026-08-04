@@ -75,12 +75,50 @@ def write_hex(data, out_path, rec_len=32):
     print(f"Wrote: {out_path} ({len(lines)} records)")
 
 
+
+
+ADAFRUIT_SETTINGS_ADDR = 0xFF000  # Adafruit bootloader settings page
+
+
+def mark_app_valid(merged, app_path):
+    """Write BANK_VALID_APP marker into the Adafruit bootloader settings page.
+
+    When flashing a full image with J-Link directly (no UF2 flow), the
+    bootloader settings page stays erased (0xFFFF) and bootloader_app_is_valid()
+    may reject the app. UF2 flashing normally writes this marker after a
+    successful update. Structure (bootloader_types.h):
+      0xFF000 bank_0     (uint16) = 0x0001 (BANK_VALID_APP)
+      0xFF002 bank_0_crc (uint16) = 0x0000 (0 = CRC check disabled)
+      0xFF004 bank_1     (uint16) stays erased (0xFFFF = BANK_INVALID_APP)
+      0xFF008 bank_0_size(uint32) = application size
+    """
+    app_data = parse_hex(app_path)
+    app_size = len(app_data)
+    merged[ADAFRUIT_SETTINGS_ADDR + 0x0] = 0x01  # bank_0 low  (BANK_VALID_APP)
+    merged[ADAFRUIT_SETTINGS_ADDR + 0x1] = 0x00
+    merged[ADAFRUIT_SETTINGS_ADDR + 0x2] = 0x00  # bank_0_crc low
+    merged[ADAFRUIT_SETTINGS_ADDR + 0x3] = 0x00
+    # bank_1 (0xFF004-0xFF005) left erased on purpose
+    merged[ADAFRUIT_SETTINGS_ADDR + 0x8] = app_size & 0xFF
+    merged[ADAFRUIT_SETTINGS_ADDR + 0x9] = (app_size >> 8) & 0xFF
+    merged[ADAFRUIT_SETTINGS_ADDR + 0xA] = (app_size >> 16) & 0xFF
+    merged[ADAFRUIT_SETTINGS_ADDR + 0xB] = (app_size >> 24) & 0xFF
+    print(f"  [settings] bank_0=BANK_VALID_APP(0x0001) crc=0 "
+          f"app_size=0x{app_size:X} @ 0x{ADAFRUIT_SETTINGS_ADDR:X}")
+
+
+
 def main():
-    if len(sys.argv) < 4:
+    args = sys.argv[1:]
+    mark_valid = False
+    if '--mark-app-valid' in args:
+        mark_valid = True
+        args.remove('--mark-app-valid')
+    if len(args) < 3:
         print(__doc__)
         sys.exit(1)
-    out_path = sys.argv[1]
-    inputs = sys.argv[2:]
+    out_path = args[0]
+    inputs = args[1:]
 
     merged = {}
     for path in inputs:
@@ -92,6 +130,9 @@ def main():
             sys.exit(1)
         merged.update(data)
         print(f"  + {path}: {len(data)} bytes (0x{min(data):08X}-0x{max(data):08X})")
+
+    if mark_valid:
+        mark_app_valid(merged, inputs[-1])
 
     write_hex(merged, out_path)
     print(f"  = total {len(merged)} bytes (0x{min(merged):08X}-0x{max(merged):08X})")

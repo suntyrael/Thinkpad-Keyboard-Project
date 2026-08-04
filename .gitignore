@@ -10,3 +10,4 @@ Desktop.ini
 *.tmp
 *.log
 __pycache__/
+nRF_Connect_Programmer_*.hex
