@@ -109,7 +109,7 @@
             , <&gpio0 14 (GPIO_ACTIVE_LOW | GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH)> /* DRV12 AC9 -> P0.14 */
             , <&gpio1 5  (GPIO_ACTIVE_LOW | GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH)> /* DRV13 T23 -> P1.05 */
             , <&gpio0 17 (GPIO_ACTIVE_LOW | GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH)> /* DRV14 AD12 -> P0.17 */
-            , <&gpio1 3  (GPIO_ACTIVE_LOW | GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH)> /* DRV15 V23 -> P1.03 */
+            , <&gpio0 8  (GPIO_ACTIVE_LOW | GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH)> /* DRV15 -> P0.08 (BMD-341) */
             ;
     };
 
@@ -125,8 +125,8 @@
     gpio_ps2: gpio_ps2 {
         status = "okay";
         compatible = "gpio-ps2";
-        scl-gpios = <&gpio1 13 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* TP4CLK -> P1.13 */
-        sda-gpios = <&gpio1 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* TP4DATA -> P1.10 */
+        scl-gpios = <&gpio0 6  (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* TP4CLK -> P0.06 (BMD-341) */
+        sda-gpios = <&gpio0 11 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* TP4DATA -> P0.11 (BMD-341) */
     };
 
     mouse_ps2: mouse_ps2 {

@@ -44,8 +44,8 @@ static int board_gpio_init(void) {
   gpio_pin_configure(gpio1_dev, 7, GPIO_OUTPUT_HIGH);  /* P1.07  Mic Mute LED  */
 
   /* ---- Input: charger interrupt (active LOW = charging) ---- */
-  gpio_pin_configure(gpio0_dev, 8,
-                     GPIO_INPUT | GPIO_PULL_UP); /* P0.08 CHG_INT */
+  gpio_pin_configure(gpio1_dev, 3,
+                     GPIO_INPUT | GPIO_PULL_UP); /* P1.03 CHG_INT (BMD-341) */
 
   /* ---- Manual Power-Off Wakeup Check ---- */
   if (NRF_POWER->GPREGRET == MANUAL_POWER_OFF_FLAG) {

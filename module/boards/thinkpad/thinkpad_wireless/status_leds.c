@@ -13,7 +13,7 @@
  *   P1.02  BT_LED        — Bluetooth status
  *   P1.06  BAT_LED_R     — Battery / charger Red
  *   P1.04  BAT_LED_G     — Battery / charger Green
- *   P0.08  CHG_INT       — Charger IC interrupt: LOW = charging, HIGH = done
+ *   P1.03  CHG_INT       — Charger IC interrupt: LOW = charging, HIGH = done (BMD-341)
  *   P0.29  Power LED     — Driven by PWM0 Channel 0 (breathing light effect)
  */
 
@@ -47,7 +47,7 @@ static const struct pwm_dt_spec pwm_led =
 #define BT_LED_PIN 2    /* P1.02  gpio1 */
 #define BAT_LED_R_PIN 6 /* P1.06  gpio1 */
 #define BAT_LED_G_PIN 4 /* P1.04  gpio1 */
-#define CHG_INT_PIN 8   /* P0.08  gpio0 */
+#define CHG_INT_PIN 3   /* P1.03  gpio1 (BMD-341) */
 #define MANUAL_POWER_OFF_FLAG 0xAA
 
 /* Active-LOW LED helpers — set physical pin directly (no polarity abstraction)
@@ -192,7 +192,7 @@ static void led_thread_fn(void *a, void *b, void *c) {
       /* ---- Battery / Charger LED ---- */
       if (vbus_present) {
         /* USB plugged in: show charger IC status via CHG_INT pin */
-        int chg = gpio_pin_get(gpio0_dev, CHG_INT_PIN);
+        int chg = gpio_pin_get(gpio1_dev, CHG_INT_PIN);
         if (chg == 0) {
           /* Charging: Red ON, Green OFF */
           LED_ON(gpio1_dev, BAT_LED_R_PIN);
