@@ -339,3 +339,22 @@
    * 删除 GitHub 远端冗余分支：`main`、`zmk-official-hwmv2-fix`、`zmk-official`；同步清理本地 `zmk-official-hwmv2-fix` 分支及失效的远端跟踪引用（`origin/HEAD` 已自动更新指向 `origin/bmd340-module`）。
 3. **保留分支**：`deepseekV4`（nRF52840 14mA High Drive 调试分支）保留，以 git worktree 方式挂在项目内 `.worktrees/deepseekV4` 并行维护，与主分支互不干扰；`.worktrees/` 已加入 `.gitignore`。
 4. **最终分支状态**：远端与本地均仅保留 `bmd340-module`（默认分支，6053a66）与 `deepseekV4`（374e4be）两个分支。
+
+### [2026-08-12] v1.0.33 — 硬件 v2 与代码同步（DRV4/DRV13 交换至标准引脚，模块型号确认为 BMD-340）
+1. **背景**：v1.0.31 的引脚重映射只覆盖了 PS/2 与 DRV15，仍有 **DRV4 (P1.01)** 与 **DRV13 (P1.05)** 两个列驱动落在受限引脚（u-blox "Standard drive, low frequency I/O only (<10kHz)"，不保证高驱动档）。列驱动需 `GPIO_DS_ALT_LOW/HIGH` 14mA 高驱动输出，同列多键同按（≥3 键，约 0.75mA）时受限引脚可能出现灌电流不足。原理图更新为 v2，采用就近交换方案将 16 个列驱动全部移至标准驱动引脚。
+2. **硬件改动**（`Hardware/BMD 340SCH.pdf` / `.tel`，v2，diff 仅 4 个网络变化）：
+   | 信号 | 原引脚 | 新引脚（模块 pin） | 引脚性质 | 说明 |
+   |---|---|---|---|---|
+   | DRV4（列驱动） | P1.01（受限） | **P0.26**（pin 7，标准） | 受限→标准 | 与 SENSE0 交换 |
+   | DRV13（列驱动） | P1.05（受限） | **P1.09**（pin 52，标准） | 受限→标准 | 与 TP4_RESET 交换 |
+   | SENSE0（行输入） | P0.26（标准） | **P1.05**（pin 48，受限） | 标准→受限 | 矩阵行输入，kHz 级低频扫描，受限引脚合规 |
+   | TP4_RESET（PS/2 复位） | P1.09（标准） | **P1.01**（pin 57，受限） | 标准→受限 | 静态复位信号（上电脉冲后保持高电平），受限引脚合规 |
+   - **模块型号确认**：实际使用 **BMD-340-A-R**（内置 PCB 天线），非 BMD-341（U.FL 外接天线）。两者 footprint 完全一致（68-pin LGA，15.0×10.2×1.9mm，datasheet 原文 "The BMD-341 footprint is identical to the BMD-340"），引脚映射无差异，仅天线形态不同：BMD-340 需 PCB 天线净空区（上下无铜 + 下方接地平面），BMD-341 需 U.FL 座装配空间。原理图器件名 `BMD-341-A-R` 与 BOM 需更正为 `BMD-340-A-R`。
+3. **代码改动**（`thinkpad_wireless.dts`，与原理图 v2 对齐）：
+   * `row-gpios` SENSE0：`P0.26` → `P1.05`（`<&gpio1 5>`）。
+   * `col-gpios` DRV4：`P1.01` → `P0.26`（`<&gpio0 26>`，高驱动配置保留）。
+   * `col-gpios` DRV13：`P1.05` → `P1.09`（`<&gpio1 9>`，高驱动配置保留）。
+   * `mouse_ps2` 的 `rst-gpios`：`P1.09` → `P1.01`（`<&gpio1 1>`）。
+4. **文档与注释修正**：全部 10 处代码注释（`.dts`/`.c`）及开发日志 v1.0.31/v1.0.32 条目中的 `BMD-341` 更正为 `BMD-340`，并补充天线差异说明。
+5. **最终引脚状态**：16 个列驱动（DRV0~DRV15）全部落在标准驱动引脚；PS/2 CLK/DATA 在标准引脚（P0.06/P0.11）、RESET 在受限引脚（P1.01，静态合规）；CHG_INT 在 P1.03（受限，静态输入合规）；矩阵行输入与静态 LED 均按低频/静态用途分布于受限引脚，符合 BMD-34x 电气规范。
+6. **Git**：`bmd340-module` 分支已推送 GitHub（`origin/bmd340-module`，当前 HEAD `d3972d5`），GitHub Actions 自动触发 CI 编译验证。
