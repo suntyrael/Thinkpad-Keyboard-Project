@@ -45,7 +45,7 @@ static int board_gpio_init(void) {
 
   /* ---- Input: charger interrupt (active LOW = charging) ---- */
   gpio_pin_configure(gpio1_dev, 3,
-                     GPIO_INPUT | GPIO_PULL_UP); /* P1.03 CHG_INT (BMD-341) */
+                     GPIO_INPUT | GPIO_PULL_UP); /* P1.03 CHG_INT (BMD-340) */
 
   /* ---- Manual Power-Off Wakeup Check ---- */
   if (NRF_POWER->GPREGRET == MANUAL_POWER_OFF_FLAG) {

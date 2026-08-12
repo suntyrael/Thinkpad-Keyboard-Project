@@ -316,8 +316,8 @@
 4. **验证效果**：P1.09 顺利恢复为 3.3V 高电平，指点杆芯片正常退出复位模式。
 
 
-### [2026-08-12] v1.0.31 — 硬件更新：BMD-341 模块设计（引脚重映射至标准驱动 GPIO）
-1. **背景**：硬件设计改用 u-blox **BMD-34x** 模块（BMD-341 对应设计，原理图与网表见 `Hardware/BMD 340SCH.pdf` / `BMD 340SCH.tel`）。BMD-34x 数据手册将 GPIO 分为两类：**标准驱动引脚**（支持 >10kHz 信号）与**受限引脚**（`P1.01-P1.07`、`P1.10-P1.15`、`P0.02/03/09/10/28-31`，标注 "Standard drive, low frequency I/O only (<10kHz)"）。原 PCB 设计中 PS/2 时钟/数据及矩阵列驱动恰好落在受限引脚上，超出其频率能力，必须重映射。
+### [2026-08-12] v1.0.31 — 硬件更新：BMD-340 模块设计（引脚重映射至标准驱动 GPIO）
+1. **背景**：硬件设计改用 u-blox **BMD-340** 模块（内置 PCB 天线；与 BMD-341 仅天线形态不同，footprint 完全兼容，原理图与网表见 `Hardware/BMD 340SCH.pdf` / `BMD 340SCH.tel`）。BMD-34x 数据手册将 GPIO 分为两类：**标准驱动引脚**（支持 >10kHz 信号）与**受限引脚**（`P1.01-P1.07`、`P1.10-P1.15`、`P0.02/03/09/10/28-31`，标注 "Standard drive, low frequency I/O only (<10kHz)"）。原 PCB 设计中 PS/2 时钟/数据及矩阵列驱动恰好落在受限引脚上，超出其频率能力，必须重映射。
 2. **引脚重映射表**（`thinkpad_wireless.dts` / `board.c` / `status_leds.c`）：
    | 信号 | 原引脚（受限） | 新引脚（标准驱动） | 说明 |
    |---|---|---|---|
@@ -329,10 +329,10 @@
    * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：`scl-gpios` = `P0.06`、`sda-gpios` = `P0.11`；矩阵 `col-gpios` 第 16 列 (DRV15) 改为 `P0.08`（`GPIO_DS_ALT_LOW/HIGH` 14mA 高驱动配置保留）。
    * `module/boards/thinkpad/thinkpad_wireless/board.c`：CHG_INT 初始化由 `gpio0 pin 8` 改为 `gpio1 pin 3`（上拉输入）。
    * `module/boards/thinkpad/thinkpad_wireless/status_leds.c`：`CHG_INT_PIN` 宏由 `8 (gpio0)` 改为 `3 (gpio1)`，充放电状态读取随引脚迁移。
-4. **验证效果**：固件与 BMD-341 模块原理图网表对齐；高频信号（PS/2、列驱动）全部落在标准驱动引脚上，符合 BMD-34x 电气规范，避免受限引脚低频驱动能力不足导致的信号完整性问题。
+4. **验证效果**：固件与 BMD-340 模块原理图网表对齐；高频信号（PS/2、列驱动）全部落在标准驱动引脚上，符合 BMD-34x 电气规范，避免受限引脚低频驱动能力不足导致的信号完整性问题。
 
 ### [2026-08-12] v1.0.32 — 分支体系整理（bmd340-module 转正为默认分支，清理冗余远端分支）
-1. **背景**：BMD-341 模块化设计（BMD340-module 分支，基于 deepseekV4 增加 2 个提交：BMD-341 原理图/网表文档与引脚重映射）验收通过，决定将其转正为项目主分支。
+1. **背景**：BMD-340 模块化设计（BMD340-module 分支，基于 deepseekV4 增加 2 个提交：BMD-340 原理图/网表文档与引脚重映射）验收通过，决定将其转正为项目主分支。
 2. **Git 仓库整理**：
    * 修复 `.git/config` 中错误的 fetch refspec（原先被限制为仅跟踪 `zmk-official-hwmv2-fix` 单分支，导致 `git fetch` 无法同步服务器上的其他分支），恢复为标准的 `+refs/heads/*:refs/remotes/origin/*` 通配规则。
    * 推送 `bmd340-module` 至 GitHub，并通过 API 将仓库默认分支（原 `zmk-official-hwmv2-fix`）切换为 `bmd340-module`。
