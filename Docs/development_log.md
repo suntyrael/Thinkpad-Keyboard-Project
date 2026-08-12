@@ -315,3 +315,12 @@
    * `module/drivers/input_mouse_ps2.c`：修正 `zmk_mouse_ps2_init_power_on_reset`，移除强行清零 `dt_flags` 的逻辑；上电复位开始时输出 0V (LOW) 维持 600ms 脉冲，复位结束后通过 `gpio_pin_set_raw(data->rst_gpio.port, data->rst_gpio.pin, 1)` 释放并保持为 **3.3V 高电平 (HIGH)**。
 4. **验证效果**：P1.09 顺利恢复为 3.3V 高电平，指点杆芯片正常退出复位模式。
 
+
+### [2026-08-12] v1.0.31 — 分支体系整理（bmd340-module 转正为默认分支，清理冗余远端分支）
+1. **背景**：BMD-341 模块化设计（BMD340-module 分支，基于 deepseekV4 增加 2 个提交：BMD-341 原理图/网表文档与引脚重映射）验收通过，决定将其转正为项目主分支。
+2. **Git 仓库整理**：
+   * 修复 `.git/config` 中错误的 fetch refspec（原先被限制为仅跟踪 `zmk-official-hwmv2-fix` 单分支，导致 `git fetch` 无法同步服务器上的其他分支），恢复为标准的 `+refs/heads/*:refs/remotes/origin/*` 通配规则。
+   * 推送 `bmd340-module` 至 GitHub，并通过 API 将仓库默认分支（原 `zmk-official-hwmv2-fix`）切换为 `bmd340-module`。
+   * 删除 GitHub 远端冗余分支：`main`、`zmk-official-hwmv2-fix`、`zmk-official`；同步清理本地 `zmk-official-hwmv2-fix` 分支及失效的远端跟踪引用（`origin/HEAD` 已自动更新指向 `origin/bmd340-module`）。
+3. **保留分支**：`deepseekV4`（nRF52840 14mA High Drive 调试分支）保留，以 git worktree 方式挂在项目内 `.worktrees/deepseekV4` 并行维护，与主分支互不干扰；`.worktrees/` 已加入 `.gitignore`。
+4. **最终分支状态**：远端与本地均仅保留 `bmd340-module`（默认分支，6053a66）与 `deepseekV4`（374e4be）两个分支。
