@@ -11,3 +11,6 @@ Desktop.ini
 *.log
 __pycache__/
 nRF_Connect_Programmer_*.hex
+
+# git worktrees
+.worktrees/
