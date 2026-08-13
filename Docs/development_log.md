@@ -358,3 +358,10 @@
 4. **文档与注释修正**：全部 10 处代码注释（`.dts`/`.c`）及开发日志 v1.0.31/v1.0.32 条目中的 `BMD-341` 更正为 `BMD-340`，并补充天线差异说明。
 5. **最终引脚状态**：16 个列驱动（DRV0~DRV15）全部落在标准驱动引脚；PS/2 CLK/DATA 在标准引脚（P0.06/P0.11）、RESET 在受限引脚（P1.01，静态合规）；CHG_INT 在 P1.03（受限，静态输入合规）；矩阵行输入与静态 LED 均按低频/静态用途分布于受限引脚，符合 BMD-34x 电气规范。
 6. **Git**：`bmd340-module` 分支已推送 GitHub（`origin/bmd340-module`，当前 HEAD `d3972d5`），GitHub Actions 自动触发 CI 编译验证。
+
+### [2026-08-13] v1.0.34 — 修复 CI 构建失败（GPIO_DS_ALT_LOW/HIGH 宏在 Zephyr 4.1 不可用）
+1. **问题现象**：GitHub Actions Build #74~#77 连续失败（`thinkpad_wireless.dts:97: devicetree error: parse error: expected number or parenthesized expression`）。#73 及之前成功。
+2. **根因分析**：失败始于 374e4be（"enable nRF52840 14mA High Drive (H0H1) for all DRV col-gpios"），该提交在全部 16 个 `col-gpios` 中加入了 `GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH` 驱动强度标志。核查 Zephyr v4.1.0（ZMK 4.4.1 所用版本）的 `include/zephyr/dt-bindings/gpio/gpio.h` 与 `include/zephyr/drivers/gpio.h`：**均不存在 GPIO_DS_* 宏**（驱动强度标志是 Zephyr 4.2+ 才引入的特性）。devicetree 解析器将未展开的宏视为非法表达式，导致构建在 DTS 解析阶段失败。与 BMD-340 模块改动无关（#74 即已失败，早于模块分支）。
+3. **修复方案**：移除全部 16 个 `col-gpios` 中的 `| GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH`，恢复为 `GPIO_ACTIVE_LOW`（#73 及之前的可用状态）。nRF52840 默认标准驱动（约 0.5mA 灌电流保证值）足以覆盖同列 1~2 键同按（内部上拉 13kΩ，单键约 0.25mA）；BMD-340 模块的 16 个列驱动均已映射至标准驱动引脚（v1.0.33），模块级驱动能力有保证。
+4. **后续选项**：若仍需 14mA 高驱动档，需等待 ZMK 升级 Zephyr ≥4.2（DTS `GPIO_DS_ALT_LOW/HIGH` 可用），或在 `board.c` 中直接操作 `NRF_P0->PIN_CNF[n].DRIVE` 寄存器（注意 ZMK kscan 运行时会重新 `gpio_pin_configure` 覆盖，需在 kscan 初始化完成后再设置，复杂度较高，暂不采用）。
+5. **验证**：修复提交推送后触发 CI，Build #78 预期通过（devicetree 解析错误消除）。
