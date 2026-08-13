@@ -51,11 +51,13 @@
             /* Row 4: Shift row */
             RC(3,14) RC(6,0)  RC(6,1)  RC(6,2)  RC(6,3)  RC(7,3)  RC(7,4)  RC(6,4)  RC(6,5)  RC(6,6)  RC(7,7)  RC(6,14) RC(5,12) RC(6,13) RC(0,13) RC(0,14)
             /* Row 5: Ctrl/Space row */
-            RC(0,15) RC(3,9)  RC(5,13) RC(4,13) RC(4,14) RC(7,8)  RC(5,15) RC(7,14) RC(7,13) RC(6,15) RC(7,12) RC(7,10) RC(7,9)  RC(1,13) RC(1,14) RC(2,14)
+            RC(0,15) RC(3,9)  RC(5,13) RC(4,13) RC(4,14) RC(7,8)  RC(2,12) RC(7,14) RC(7,13) RC(6,15) RC(7,12) RC(7,10) RC(7,9)  RC(1,13) RC(1,14) RC(2,14)
             /* Row 6: Media keys */
-            RC(2,10) RC(3,10) RC(4,10) RC(6,10) RC(5,10) RC(0,11) RC(1,11) RC(6,11) RC(7,11) RC(1,13) RC(2,13) RC(6,12) RC(7,15) RC(2,15) RC(3,15) RC(4,15)
-            /* Row 7: Unused */
-            RC(0,9)  RC(1,15) RC(2,9)  RC(3,13) RC(4,9)  RC(5,9)  RC(6,9)  RC(7,5)  RC(7,6)  RC(0,13) RC(0,14) RC(0,15) RC(1,13) RC(1,14) RC(2,13) RC(2,14)
+            RC(2,10) RC(3,10) RC(4,10) RC(6,10) RC(5,10) RC(0,11) RC(1,11) RC(6,11) RC(7,11) RC(2,11) RC(2,13) RC(6,12) RC(7,15) RC(2,15) RC(3,15) RC(4,15)
+            /* Row 7: Unused — every cell below is unique so ZMK Studio does
+             * not create ghost keys from duplicated matrix coordinates
+             * (review 2026-08-13 item 2.9) */
+            RC(0,9)  RC(1,15) RC(2,9)  RC(3,13) RC(4,9)  RC(5,9)  RC(6,9)  RC(7,5)  RC(7,6)  RC(7,0)  RC(7,1)  RC(7,2)  RC(6,7)  RC(5,1)  RC(5,6)  RC(2,8)
             /* Row 8: Direct keys */
             RC(8,0)  RC(8,1)
         >;
@@ -142,6 +144,15 @@
         device = <&mouse_ps2>;
     };
 
+    /* Behavior node so CONFIG_ZMK_BEHAVIOR_MOUSE_SETTING compiles the
+     * &mms trackpoint-tuning behaviors (sensitivity / negative inertia /
+     * upper plateau speed / press-to-select threshold). Without this node
+     * the driver was never instantiated (review 2026-08-13 item 2.15). */
+    mouse_setting: mouse_setting {
+        compatible = "zmk,behavior-mouse-setting";
+        #binding-cells = <1>;
+    };
+
     vbatt: vbatt {
         compatible = "zmk,battery-voltage-divider";
         io-channels = <&adc 0>; /* A12 -> AIN0 (Channel 0) */
@@ -156,31 +167,16 @@
         };
     };
 
+    /* Only caps_lock_led is referenced by the zmk,indicator-leds node above.
+     * The other LEDs (BT / battery / mute / mic-mute) are driven exclusively
+     * by status_leds.c through raw GPIO (pin macros in board_hw.h) and were
+     * never bound to any behavior; keeping them here as gpio-leds children
+     * created a second, conflicting ownership (review 2026-08-13 item 2.4). */
     leds {
         compatible = "gpio-leds";
         caps_lock_led: caps_lock_led {
             gpios = <&gpio0 31 GPIO_ACTIVE_LOW>; /* A8 -> P0.31 */
             label = "Caps Lock LED";
-        };
-        mute_led: mute_led {
-            gpios = <&gpio1 15 GPIO_ACTIVE_LOW>; /* A14 -> P1.15 */
-            label = "Mute LED";
-        };
-        mic_mute_led: mic_mute_led {
-            gpios = <&gpio1 7 GPIO_ACTIVE_LOW>; /* P23 -> P1.07 */
-            label = "Mic Mute LED";
-        };
-        bt_led: bt_led {
-            gpios = <&gpio1 2 GPIO_ACTIVE_LOW>; /* W24 -> P1.02 */
-            label = "Bluetooth LED";
-        };
-        bat_led_r: bat_led_r {
-            gpios = <&gpio1 6 GPIO_ACTIVE_LOW>; /* R24 -> P1.06 */
-            label = "Battery Red LED";
-        };
-        bat_led_g: bat_led_g {
-            gpios = <&gpio1 4 GPIO_ACTIVE_LOW>; /* U24 -> P1.04 */
-            label = "Battery Green LED";
         };
     };
 

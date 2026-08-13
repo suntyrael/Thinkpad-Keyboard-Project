@@ -38,3 +38,61 @@ config PS2_UART
     select SERIAL
     select UART_ASYNC_API
     select UART_USE_RUNTIME_CONFIGURE
+
+# ---------------------------------------------------------------------------
+# Log level shared by the GPIO/UART PS/2 transport drivers
+# (referenced as `#define LOG_LEVEL CONFIG_PS2_LOG_LEVEL`; without a
+# definition the LOG_LEVEL macro was empty and module log behavior was
+# undefined - review 2026-08-13 item 1.5).
+config PS2_LOG_LEVEL
+    int "PS/2 driver log level"
+    # 3 = INFO, matching Zephyr's LOG_DEFAULT_LEVEL default. Use a literal
+    # instead of `default LOG_DEFAULT_LEVEL` because module Kconfig files are
+    # parsed before the logging subsystem Kconfig, which left the value
+    # unresolved (empty) and broke the generated assembly.
+    default 3
+    range 0 4
+    help
+      Log level for the GPIO/UART PS/2 drivers: 0 = off, 1 = error,
+      2 = warning, 3 = info, 4 = debug.
+
+# Error mitigation: drops packets that look like transmission errors
+# (double overflow, implausibly large jumps). Was silently never compiled
+# because the option was not defined (review 2026-08-13 item 1.5).
+config ZMK_INPUT_MOUSE_PS2_ENABLE_ERROR_MITIGATION
+    bool "Enable transmission error mitigation in the PS/2 mouse driver"
+    default n
+    depends on ZMK_INPUT_MOUSE_PS2
+    help
+      When enabled, packets with overflow on both axes or with an
+      implausibly large movement delta are treated as transmission errors
+      and discarded instead of being reported to the host.
+
+# Resend-callback support: lets the mouse driver reset its packet buffer
+# when the transport driver asks the device to resend. The transport option
+# gates the resend callback API in the driver, the mouse option gates the
+# mouse-side handler; keep them in sync (review 2026-08-13 item 1.5).
+config PS2_GPIO_ENABLE_PS2_RESEND_CALLBACK
+    bool "Enable PS/2 resend callback support (GPIO driver)"
+    default n
+    depends on PS2_GPIO
+
+config PS2_UART_ENABLE_PS2_RESEND_CALLBACK
+    bool "Enable PS/2 resend callback support (UART driver)"
+    default n
+    depends on PS2_UART
+
+config ZMK_INPUT_MOUSE_PS2_ENABLE_PS2_RESEND_CALLBACK
+    bool "Handle PS/2 resend callbacks in the mouse driver"
+    default y if PS2_GPIO_ENABLE_PS2_RESEND_CALLBACK || PS2_UART_ENABLE_PS2_RESEND_CALLBACK
+    depends on ZMK_INPUT_MOUSE_PS2
+    help
+      Passes the resend callback through to the PS/2 mouse driver so it can
+      reset its packet buffer when the device is asked to resend.
+
+# Verbose interrupt-level logging used for debugging PS/2 timing issues
+# (review 2026-08-13 item 1.5).
+config PS2_GPIO_INTERRUPT_LOG_ENABLED
+    bool "Enable verbose GPIO PS/2 interrupt logging"
+    default n
+    depends on PS2_GPIO

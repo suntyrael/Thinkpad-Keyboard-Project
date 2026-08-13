@@ -3,9 +3,17 @@ manifest:
     - name: zmkfirmware
       url-base: https://github.com/zmkfirmware
   projects:
+    # Pin ZMK to an exact commit instead of the rolling `main` branch so that
+    # historical firmware builds are reproducible and upstream ZMK/Zephyr
+    # changes cannot silently break the build (review 2026-08-13 item 1.6).
+    #
+    # This commit (2026-08-10) is the `main` HEAD that the project was
+    # verified against when the pin was made. ZMK's release tags are v0.1.0 ..
+    # v0.3.0 (Zephyr 4.1.0+zmk-fixes); upgrade deliberately by changing this
+    # revision and re-running the CI build.
     - name: zmk
       remote: zmkfirmware
-      revision: main
+      revision: 6e2ef41e022d555b10f116e395832913f71717b3
       import: app/west.yml
   self:
     path: config

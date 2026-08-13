@@ -284,7 +284,7 @@ static struct zmk_mouse_ps2_data zmk_mouse_ps2_data = {
     .tp_pts_threshold = MOUSE_PS2_CMD_TP_SET_PTS_THRESHOLD_DEFAULT,
 };
 
-static int allowed_sampling_rates[] = {
+static const int allowed_sampling_rates[] = {
     10, 20, 40, 60, 80, 100, 200,
 };
 
@@ -508,10 +508,11 @@ struct zmk_mouse_ps2_packet zmk_mouse_ps2_activity_parse_packet_buffer(
   // scroll wheel. It is a signed number with the rango of
   // -8 to +7.
   if (packet_mode == MOUSE_PS2_PACKET_MODE_SCROLL) {
-    MOUSE_PS2_SET_BIT(packet.scroll, MOUSE_PS2_GET_BIT(packet_extra, 0), 0);
-    MOUSE_PS2_SET_BIT(packet.scroll, MOUSE_PS2_GET_BIT(packet_extra, 1), 1);
-    MOUSE_PS2_SET_BIT(packet.scroll, MOUSE_PS2_GET_BIT(packet_extra, 2), 2);
-    packet.scroll = packet_extra - ((packet.scroll << 3) & 0x100);
+    // The scroll wheel value is a signed 4-bit number (-8 .. +7) stored in
+    // the low nibble of the extra byte. Sign-extend bit 3 to the full int8_t.
+    // (The old code built the value from bits 0-2 only and then masked off the
+    // sign bit, so negative scrolls decoded as +8..+15; review 2026-08-13 1.7)
+    packet.scroll = (int8_t)(packet_extra << 4) >> 4;
   }
 
   return packet;
@@ -610,48 +611,49 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
     // If it wasn't, we actually send the events.
     if (buttons_pressed > 0 || buttons_released > 0) {
 
+      // Decrement only inside the branch that actually fires, so that a lone
+      // right/middle button change still reports sync=true and is flushed
+      // immediately (review 2026-08-13 item 1.4). K_NO_WAIT keeps this
+      // callback-workqueue context from blocking forever when the input queue
+      // backs up (review 2026-08-13 item 2.5).
       int buttons_need_reporting = buttons_pressed + buttons_released;
 
       // Left button
       if (button_l_pressed) {
-
+        buttons_need_reporting--;
         input_report_key(data->dev, INPUT_BTN_0, 1,
-                         buttons_need_reporting == 1 ? true : false, K_FOREVER);
+                         buttons_need_reporting == 0 ? true : false, K_NO_WAIT);
         data->button_l_is_held = true;
       } else if (button_l_released) {
-
+        buttons_need_reporting--;
         input_report_key(data->dev, INPUT_BTN_0, 0,
-                         buttons_need_reporting == 1 ? true : false, K_FOREVER);
+                         buttons_need_reporting == 0 ? true : false, K_NO_WAIT);
         data->button_l_is_held = false;
       }
 
-      buttons_need_reporting--;
-
       // Right button
       if (button_r_pressed) {
-
+        buttons_need_reporting--;
         input_report_key(data->dev, INPUT_BTN_1, 1,
-                         buttons_need_reporting == 1 ? true : false, K_FOREVER);
+                         buttons_need_reporting == 0 ? true : false, K_NO_WAIT);
         data->button_r_is_held = true;
       } else if (button_r_released) {
-
+        buttons_need_reporting--;
         input_report_key(data->dev, INPUT_BTN_1, 0,
-                         buttons_need_reporting == 1 ? true : false, K_FOREVER);
+                         buttons_need_reporting == 0 ? true : false, K_NO_WAIT);
         data->button_r_is_held = false;
       }
 
-      buttons_need_reporting--;
-
       // Middle Button
       if (button_m_pressed) {
-
+        buttons_need_reporting--;
         input_report_key(data->dev, INPUT_BTN_2, 1,
-                         buttons_need_reporting == 1 ? true : false, K_FOREVER);
+                         buttons_need_reporting == 0 ? true : false, K_NO_WAIT);
         data->button_m_is_held = true;
       } else if (button_m_released) {
-
+        buttons_need_reporting--;
         input_report_key(data->dev, INPUT_BTN_2, 0,
-                         buttons_need_reporting == 1 ? true : false, K_FOREVER);
+                         buttons_need_reporting == 0 ? true : false, K_NO_WAIT);
         data->button_m_is_held = false;
       }
     }
@@ -712,7 +714,7 @@ zmk_mouse_ps2_send_cmd(char *cmd, int cmd_len, uint8_t *arg, int resp_len,
     resp.err = zmk_mouse_ps2_activity_reporting_disable();
     if (resp.err) {
       snprintf(resp.err_msg, sizeof(resp.err_msg),
-               "Could not disable data reporting (%d)", err);
+               "Could not disable data reporting (%d)", resp.err);
     }
   }
 
@@ -723,7 +725,8 @@ zmk_mouse_ps2_send_cmd(char *cmd, int cmd_len, uint8_t *arg, int resp_len,
       resp.err = ps2_write(ps2_device, cmd[i]);
       if (resp.err) {
         snprintf(resp.err_msg, sizeof(resp.err_msg),
-                 "Could not send cmd byte %d/%d (%d)", i + 1, cmd_bytes, err);
+                 "Could not send cmd byte %d/%d (%d)", i + 1, cmd_bytes,
+                 resp.err);
         break;
       }
     }
@@ -734,7 +737,7 @@ zmk_mouse_ps2_send_cmd(char *cmd, int cmd_len, uint8_t *arg, int resp_len,
     resp.err = ps2_write(ps2_device, *arg);
     if (resp.err) {
       snprintf(resp.err_msg, sizeof(resp.err_msg), "Could not send arg (%d)",
-               err);
+               resp.err);
     }
   }
 
@@ -745,7 +748,7 @@ zmk_mouse_ps2_send_cmd(char *cmd, int cmd_len, uint8_t *arg, int resp_len,
       if (resp.err) {
         snprintf(resp.err_msg, sizeof(resp.err_msg),
                  "Could not read response cmd byte %d/%d (%d)", i + 1, resp_len,
-                 err);
+                 resp.err);
         break;
       }
     }
@@ -826,7 +829,7 @@ int zmk_mouse_ps2_activity_reporting_disable() {
  * PS/2 Command Helpers
  */
 
-int zmk_mouse_ps2_array_get_elem_index(int elem, int *array,
+int zmk_mouse_ps2_array_get_elem_index(int elem, const int *array,
                                        size_t array_size) {
   int elem_index = -1;
   for (int i = 0; i < array_size; i++) {
@@ -839,7 +842,8 @@ int zmk_mouse_ps2_array_get_elem_index(int elem, int *array,
   return elem_index;
 }
 
-int zmk_mouse_ps2_array_get_next_elem(int elem, int *array, size_t array_size) {
+int zmk_mouse_ps2_array_get_next_elem(int elem, const int *array,
+                                      size_t array_size) {
   int elem_index = zmk_mouse_ps2_array_get_elem_index(elem, array, array_size);
   if (elem_index == -1) {
     return -1;
@@ -853,7 +857,8 @@ int zmk_mouse_ps2_array_get_next_elem(int elem, int *array, size_t array_size) {
   return array[next_index];
 }
 
-int zmk_mouse_ps2_array_get_prev_elem(int elem, int *array, size_t array_size) {
+int zmk_mouse_ps2_array_get_prev_elem(int elem, const int *array,
+                                      size_t array_size) {
   int elem_index = zmk_mouse_ps2_array_get_elem_index(elem, array, array_size);
   if (elem_index == -1) {
     return -1;
@@ -885,8 +890,9 @@ int zmk_mouse_ps2_reset(const struct device *ps2_device) {
 int zmk_mouse_ps2_set_sampling_rate(uint8_t sampling_rate) {
   struct zmk_mouse_ps2_data *data = &zmk_mouse_ps2_data;
 
-  int rate_idx = zmk_mouse_ps2_array_get_elem_index(
-      sampling_rate, allowed_sampling_rates, sizeof(allowed_sampling_rates));
+  int rate_idx =
+      zmk_mouse_ps2_array_get_elem_index(sampling_rate, allowed_sampling_rates,
+                                         ARRAY_SIZE(allowed_sampling_rates));
   if (rate_idx == -1) {
     LOG_ERR("Requested to set illegal sampling rate: %d", sampling_rate);
     return -1;
@@ -1536,7 +1542,7 @@ int zmk_mouse_ps2_settings_log() {
     tp-sensitivity = <%d>; \n\
     tp-neg-inertia = <%d>; \n\
     tp-val6-upper-speed = <%d>; \n\
-    tp-tp-press-to-select-threshold = <%d>; \n\
+    tp-press-to-select-threshold = <%d>; \n\
 }",
            data->tp_sensitivity, data->tp_neg_inertia, data->tp_value6,
            data->tp_pts_threshold);
@@ -1660,7 +1666,7 @@ int zmk_mouse_ps2_settings_init() {
  * Init
  */
 
-static void zmk_mouse_ps2_init_thread(int dev_ptr, int unused);
+static void zmk_mouse_ps2_init_thread(const struct device *dev, int unused);
 int zmk_mouse_ps2_init_power_on_reset();
 int zmk_mouse_ps2_init_wait_for_mouse(const struct device *dev);
 
@@ -1677,11 +1683,11 @@ static int zmk_mouse_ps2_init(const struct device *dev) {
   return 0;
 }
 
-static void zmk_mouse_ps2_init_thread(int dev_ptr, int unused) {
+static void zmk_mouse_ps2_init_thread(const struct device *dev, int unused) {
   struct zmk_mouse_ps2_data *data = &zmk_mouse_ps2_data;
   int err;
 
-  data->dev = INT_TO_POINTER(dev_ptr);
+  data->dev = dev;
 
   const struct zmk_mouse_ps2_config *config = data->dev->config;
 

@@ -1,7 +1,7 @@
 #define DT_DRV_COMPAT zmk_behavior_mouse_setting
 
+#include <drivers/behavior.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/behavior.h>
 #include <zephyr/logging/log.h>
 
 #include <dt-bindings/zmk/mouse_settings.h>
@@ -56,7 +56,7 @@ static int on_keymap_binding_released(struct zmk_behavior_binding *binding,
 // Initialization Function
 static int zmk_behavior_mouse_setting_init(const struct device *dev) {
   return 0;
-};
+}
 
 static const struct behavior_driver_api zmk_behavior_mouse_setting_driver_api =
     {.binding_pressed = on_keymap_binding_pressed,

@@ -1,0 +1,15 @@
+# Project-wide clang-format style (review 2026-08-13 item 2.6):
+# previously the CI lint workflow auto-rewrote sources with clang-format's
+# defaults because no .clang-format existed, producing noisy commits.
+# Style mirrors the existing ZMK module code: LLVM base, 2-space indent.
+BasedOnStyle: LLVM
+IndentWidth: 2
+ContinuationIndentWidth: 4
+ColumnLimit: 80
+TabWidth: 2
+UseTab: Never
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+SortIncludes: true

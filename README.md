@@ -17,73 +17,97 @@
 
 ## ⚡ 硬件架构与主要器件
 
-1.  **主控芯片**：**Nordic nRF52840-QIAA-R0** (aQFN73 / QFN73 封装)，提供 48 个 GPIO，具备极低的蓝牙功耗。
+1.  **主控芯片**：**Nordic nRF52840-QIAA-R0**，以 **u-blox BMD-340-A-R** 模块（68-pin LGA，内置 PCB 天线，QIAA 球栅封装）形式集成，提供 48 个 GPIO，具备极低的蓝牙功耗。
 2.  **供电与 LDO**：
     *   主控采用 **RT9080-33GJ5** (或 SGM2036-3.3) 3.3V LDO，其静态功耗 $ 仅为 **2µA**，最大支持 600mA 输出，非常适合低功耗蓝牙外设。
     *   主控供电配置为 Normal Voltage 模式（短接 VDDH 与 VDD，禁用内部 REG0 高压调节器）。
 3.  **充电芯片**：**TP4054-42-SOT25R** 线性充电芯片 (SOT-25-5 封装)，充电电流根据 PROG 电阻设置（如 2k 对应 500mA）。
 4.  **BTB 连接器**：**Molex 54363-0489** (44-Pin 板对板连接器公座)，用于精确匹配 X220 键盘端的 44-pin 排线。
-5.  **电量检测**：通过 10M / 10M 电阻分压网络，将电池电压送入 `P0.02` 引脚（AIN0，SAADC 通道 0），利用 SAADC 进行电压读取与电量计算。
+5.  **电量检测**：通过 100kΩ / 100kΩ (50%) 电阻分压网络（DTS: `output-ohms=100000` / `full-ohms=200000`），将电池电压送入 `P0.02` 引脚（AIN0，SAADC 通道 0），利用 SAADC 进行电压读取与电量计算。
 6.  **5V Boost 升压控制**：新增了 `5V_EN` 网络连接至 `P0.12`，用作 5V 升压电路的使能端（为 5V 小红帽和 T61 键盘提供兼容备份）。在固件中配置了 ZMK 的 Ext-Power（外部电源控制），使得键盘进入休眠时能自动拉低 `P0.12` 关断 5V Boost，唤醒时再自动拉高开启，实现极低的待机功耗。
 
 ---
 
 ## 🔌 引脚映射与电路连接
 
-以下是经原理图 `SCH_Schematic1_2026-07-09.pdf` 最终确认的信号与物理接口引脚映射关系。包含了 `U2` (X220 BTB 键盘座)、`FPC2` (T61 FPC 键盘座) 以及板级信号转接排线 `FPC3` 的管脚对应。
+以下引脚表对应 **BMD-340 模块方案（硬件 v2，现行默认）**：主控以 u-blox **BMD-340-A-R** 模块（68-pin LGA，内置 nRF52840-QIAA）形式集成，「模块引脚」列为模块器件引脚号（U8.x）。此前的**单芯片方案（硬件 v1，≤ v1.0.30）** 将 nRF52840-QIAA 直接焊于 PCB（引脚以芯片球位标注），**已废弃**，两种方案的差异与 8 个重映射信号对照见下文第 2 节。
+
+> **⚠️ 引脚表维护规则（review 2026-08-13 1.8）**：本表以 `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts` + 原理图网表 `BMD 340SCH.tel` 为**唯一事实来源**；修改 DTS 引脚时必须同步更新本表。MCU GPIO 列即 DTS 中实际的 `gpioX Y` 值；「模块引脚」列为 u-blox BMD-340 的 U8 器件引脚号。
 
 ### 1. 键盘矩阵与外设 GPIO 映射表
 
-| 信号名称 | MCU引脚 (GPIO) | MCU物理球位 (Ball) | FPC3引脚 (主控板端) | U2引脚 (X220 BTB) | FPC2引脚 (转接板端) | 作用与配置说明 |
+| 信号名称 | MCU引脚 (GPIO) | BMD-340 模块引脚 | FPC3引脚 (主控板端) | U2引脚 (X220 BTB) | FPC2引脚 (转接板端) | 作用与配置说明 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **KEY_SENSE0** | `P0.26` | `G1` | Pin 17 | Pin 5 | Pin 24 | 矩阵行 0 读取，`row-gpios` 分配 |
-| **KEY_SENSE1** | `P0.28` | `B11` | Pin 13 | Pin 13 | Pin 28 | 矩阵行 1 读取，`row-gpios` 分配 |
-| **KEY_SENSE2** | `P0.05` | `K2` | Pin 15 | Pin 9 | Pin 26 | 矩阵行 2 读取，`row-gpios` 分配 |
-| **KEY_SENSE3** | `P0.04` | `J1` | Pin 16 | Pin 7 | Pin 25 | 矩阵行 3 读取，`row-gpios` 分配 |
-| **KEY_SENSE4** | `P0.27` | `H2` | Pin 14 | Pin 11 | Pin 27 | 矩阵行 4 读取，`row-gpios` 分配 |
-| **KEY_SENSE5** | `P0.07` | `M2` | Pin 18 | Pin 3 | Pin 23 | 矩阵行 5 读取，`row-gpios` 分配 |
-| **KEY_SENSE6** | `P1.12` | `B17` | Pin 11 | Pin 17 | Pin 30 | 矩阵行 6 读取，`row-gpios` 分配 |
-| **KEY_SENSE7** | `P1.14` | `B15` | Pin 12 | Pin 15 | Pin 29 | 矩阵行 7 读取，`row-gpios` 分配 |
-| **KEY_DRV0** | `P0.13` | `AD8` | Pin 30 | Pin 22 | Pin 11 | 矩阵列 0 驱动，`col-gpios` 分配 |
-| **KEY_DRV1** | `P0.20` | `AD16` | Pin 32 | Pin 18 | Pin 9 | 矩阵列 1 驱动，`col-gpios` 分配 |
-| **KEY_DRV2** | `P0.22` | `AD18` | Pin 34 | Pin 14 | Pin 7 | 矩阵列 2 驱动，`col-gpios` 分配 |
-| **KEY_DRV3** | `P0.24` | `AD20` | Pin 36 | Pin 10 | Pin 5 | 矩阵列 3 驱动，`col-gpios` 分配 |
-| **KEY_DRV4** | `P1.01` | `Y23` | Pin 40 | Pin 2 | Pin 1 | 矩阵列 4 驱动，`col-gpios` 分配 |
-| **KEY_DRV5** | `P0.25` | `AC21` | Pin 39 | Pin 4 | Pin 2 | 矩阵列 5 驱动，`col-gpios` 分配 |
-| **KEY_DRV6** | `P1.00` | `AD22` | Pin 37 | Pin 8 | Pin 4 | 矩阵列 6 驱动，`col-gpios` 分配 |
-| **KEY_DRV7** | `P0.21` | `AC17` | Pin 35 | Pin 12 | Pin 6 | 矩阵列 7 驱动，`col-gpios` 分配 |
-| **KEY_DRV8** | `P0.23` | `AC19` | Pin 38 | Pin 6 | Pin 3 | 矩阵列 8 驱动，`col-gpios` 分配 |
-| **KEY_DRV9** | `P0.16` | `AC11` | Pin 31 | Pin 20 | Pin 10 | 矩阵列 9 驱动，`col-gpios` 分配 |
-| **KEY_DRV10** | `P0.19` | `AC15` | Pin 33 | Pin 16 | Pin 8 | 矩阵列 10 驱动，`col-gpios` 分配 |
-| **KEY_DRV11** | `P0.15` | `AD10` | Pin 29 | Pin 24 | Pin 12 | 矩阵列 11 驱动，`col-gpios` 分配 |
-| **KEY_DRV12** | `P0.14` | `AC9` | Pin 27 | Pin 28 | Pin 14 | 矩阵列 12 驱动，`col-gpios` 分配 |
-| **KEY_DRV13** | `P1.05` | `T23` | Pin 25 | Pin 32 | Pin 16 | 矩阵列 13 驱动，`col-gpios` 分配 |
-| **KEY_DRV14** | `P0.17` | `AD12` | Pin 28 | Pin 26 | Pin 13 | 矩阵列 14 驱动，`col-gpios` 分配 |
-| **KEY_DRV15** | `P1.03` | `V23` | Pin 26 | Pin 30 | Pin 15 | 矩阵列 15 驱动，`col-gpios` 分配 |
-| **TP4CLK** | `P1.13` | `A16` | Pin 3 | Pin 39 | Pin 38 | 小红帽时钟端，PS/2 接口 |
-| **TP4DATA** | `P1.10` | `A20` | Pin 2 | Pin 37 | Pin 39 | 小红帽数据端，PS/2 接口 |
-| **TP4_RESET** | `P1.09` | `R1` | Pin 21 | Pin 40 (via R15) | Pin 20 | 小红帽复位信号 |
-| **LEDCPSLOCK** | `P0.31` | `A8` | Pin 9 | Pin 21 (via R18) | Pin 32 | 大写锁定 (Caps Lock) 指示灯 (低电平点亮) |
-| **LEDPWR** | `P0.29` | `A10` | Pin 8 | Pin 23 (via R19) | Pin 33 | 电源状态指示灯 (低电平点亮) |
-| **-LED_MUTE** | `P1.15` | `A14` | Pin 7 | Pin 33 (via R17) | Pin 34 | 扬声器静音指示灯 (低电平点亮) |
-| **-LEDMICMUTE_R** | `P1.07` | `P23` | Pin 23 | Pin 36 (via R16) | Pin 18 | 麦克风静音指示灯 (低电平点亮) |
-| **BT_LED** | `P1.02` | `W24` | - | - | - | 蓝牙配对与状态指示灯 (低电平点亮) |
-| **BAT_LED_R** | `P1.06` | `R24` | - | - | - | 充电指示红灯 (低电平点亮) |
-| **BAT_LED_G** | `P1.04` | `U24` | - | - | - | 充满/充电绿灯 (低电平点亮) |
-| **5V_EN** | `P0.12` | `U1` | - | - | - | 5V Boost 升压使能端 (高电平开启) |
-| **BAT_ADC** | `P0.02` | `A12` | - | - | - | 电池电压采集 (AIN0) |
-| **CHG_INT** | `P0.08` | `N1` | - | - | - | 充电状态中断读取 |
-| **-PWRSWITCH** | `P1.11` | `B19` | Pin 10 | Pin 19 | Pin 31 | 电源按键输入 (低电平触发) |
-| **-HOTKEY** | `P1.08` | `P2` | Pin 19 | Pin 1 | Pin 22 | ThinkVantage 按键输入 (低电平触发) |
+| **KEY_SENSE0** | `P1.05` | `U8.48` | Pin 17 | Pin 5 | Pin 24 | 矩阵行 0 读取，`row-gpios` 分配（BMD-340 重映射，受限引脚合规） |
+| **KEY_SENSE1** | `P0.28` | `U8.9` | Pin 13 | Pin 13 | Pin 28 | 矩阵行 1 读取，`row-gpios` 分配 |
+| **KEY_SENSE2** | `P0.05` | `U8.21` | Pin 15 | Pin 9 | Pin 26 | 矩阵行 2 读取，`row-gpios` 分配 |
+| **KEY_SENSE3** | `P0.04` | `U8.20` | Pin 16 | Pin 7 | Pin 25 | 矩阵行 3 读取，`row-gpios` 分配 |
+| **KEY_SENSE4** | `P0.27` | `U8.8` | Pin 14 | Pin 11 | Pin 27 | 矩阵行 4 读取，`row-gpios` 分配 |
+| **KEY_SENSE5** | `P0.07` | `U8.23` | Pin 18 | Pin 3 | Pin 23 | 矩阵行 5 读取，`row-gpios` 分配 |
+| **KEY_SENSE6** | `P1.12` | `U8.61` | Pin 11 | Pin 17 | Pin 30 | 矩阵行 6 读取，`row-gpios` 分配 |
+| **KEY_SENSE7** | `P1.14` | `U8.63` | Pin 12 | Pin 15 | Pin 29 | 矩阵行 7 读取，`row-gpios` 分配 |
+| **KEY_DRV0** | `P0.13` | `U8.31` | Pin 30 | Pin 22 | Pin 11 | 矩阵列 0 驱动，`col-gpios` 分配 |
+| **KEY_DRV1** | `P0.20` | `U8.38` | Pin 32 | Pin 18 | Pin 9 | 矩阵列 1 驱动，`col-gpios` 分配 |
+| **KEY_DRV2** | `P0.22` | `U8.40` | Pin 34 | Pin 14 | Pin 7 | 矩阵列 2 驱动，`col-gpios` 分配 |
+| **KEY_DRV3** | `P0.24` | `U8.42` | Pin 36 | Pin 10 | Pin 5 | 矩阵列 3 驱动，`col-gpios` 分配 |
+| **KEY_DRV4** | `P0.26` | `U8.7` | Pin 40 | Pin 2 | Pin 1 | 矩阵列 4 驱动（BMD-340 重映射，标准驱动引脚） |
+| **KEY_DRV5** | `P0.25` | `U8.6` | Pin 39 | Pin 4 | Pin 2 | 矩阵列 5 驱动，`col-gpios` 分配 |
+| **KEY_DRV6** | `P1.00` | `U8.56` | Pin 37 | Pin 8 | Pin 4 | 矩阵列 6 驱动，`col-gpios` 分配 |
+| **KEY_DRV7** | `P0.21` | `U8.36` | Pin 35 | Pin 12 | Pin 6 | 矩阵列 7 驱动，`col-gpios` 分配 |
+| **KEY_DRV8** | `P0.23` | `U8.41` | Pin 38 | Pin 6 | Pin 3 | 矩阵列 8 驱动，`col-gpios` 分配 |
+| **KEY_DRV9** | `P0.16` | `U8.34` | Pin 31 | Pin 20 | Pin 10 | 矩阵列 9 驱动，`col-gpios` 分配 |
+| **KEY_DRV10** | `P0.19` | `U8.37` | Pin 33 | Pin 16 | Pin 8 | 矩阵列 10 驱动，`col-gpios` 分配 |
+| **KEY_DRV11** | `P0.15` | `U8.33` | Pin 29 | Pin 24 | Pin 12 | 矩阵列 11 驱动，`col-gpios` 分配 |
+| **KEY_DRV12** | `P0.14` | `U8.32` | Pin 27 | Pin 28 | Pin 14 | 矩阵列 12 驱动，`col-gpios` 分配 |
+| **KEY_DRV13** | `P1.09` | `U8.52` | Pin 25 | Pin 32 | Pin 16 | 矩阵列 13 驱动（BMD-340 重映射，标准驱动引脚） |
+| **KEY_DRV14** | `P0.17` | `U8.35` | Pin 28 | Pin 26 | Pin 13 | 矩阵列 14 驱动，`col-gpios` 分配 |
+| **KEY_DRV15** | `P0.08` | `U8.24` | Pin 26 | Pin 30 | Pin 15 | 矩阵列 15 驱动（BMD-340 重映射，标准驱动引脚） |
+| **TP4CLK** | `P0.06` | `U8.22` | Pin 3 | Pin 39 | Pin 38 | 小红帽时钟端，PS/2 接口（BMD-340 重映射，标准驱动引脚） |
+| **TP4DATA** | `P0.11` | `U8.27` | Pin 2 | Pin 37 | Pin 39 | 小红帽数据端，PS/2 接口（BMD-340 重映射，标准驱动引脚） |
+| **TP4_RESET** | `P1.01` | `U8.57` | Pin 21 | Pin 40 (via R15) | Pin 20 | 小红帽复位信号（BMD-340 重映射，静态信号，受限引脚合规） |
+| **LEDCPSLOCK** | `P0.31` | `U8.12` | Pin 9 | Pin 21 (via R18) | Pin 32 | 大写锁定 (Caps Lock) 指示灯 (低电平点亮，由 `zmk,indicator-leds` 驱动) |
+| **LEDPWR** | `P0.29` | `U8.10` | Pin 8 | Pin 23 (via R19) | Pin 33 | 电源状态指示灯 (低电平点亮，PWM0 驱动) |
+| **-LED_MUTE** | `P1.15` | `U8.64` | Pin 7 | Pin 33 (via R17) | Pin 34 | 扬声器静音指示灯 (低电平点亮，status_leds.c 裸 GPIO 驱动) |
+| **-LEDMICMUTE_R** | `P1.07` | `U8.50` | Pin 23 | Pin 36 (via R16) | Pin 18 | 麦克风静音指示灯 (低电平点亮，status_leds.c 裸 GPIO 驱动) |
+| **BT_LED** | `P1.02` | `U8.58` | - | - | - | 蓝牙配对与状态指示灯 (低电平点亮) |
+| **BAT_LED_R** | `P1.06` | `U8.49` | - | - | - | 充电指示红灯 (低电平点亮) |
+| **BAT_LED_G** | `P1.04` | `U8.60` | - | - | - | 充满/充电绿灯 (低电平点亮) |
+| **5V_EN** | `P0.12` | `U8.28` | - | - | - | 5V Boost 升压使能端 (高电平开启) |
+| **BAT_ADC** | `P0.02` | `U8.15` | - | - | - | 电池电压采集 (AIN0) |
+| **CHG_INT** | `P1.03` | `U8.59` | - | - | - | 充电状态中断读取 (BMD-340 重映射，静态低频输入，受限引脚合规) |
+| **-PWRSWITCH** | `P1.11` | `U8.54` | Pin 10 | Pin 19 | Pin 31 | 电源按键输入 (低电平触发) |
+| **-HOTKEY** | `P1.08` | `U8.51` | Pin 19 | Pin 1 | Pin 22 | ThinkVantage 按键输入 (低电平触发) |
 | **VDD3V3** | - | - | Pin 5 | Pin 36 | Pin 35 | 3.3V 系统电源供电网络 |
 | **VDD3V3/5V (Selectable)** | - | - | Pin 22 | Pin 19 | Pin 38 | 可选系统主电源（由 R22 (0R) 选 5V，R23 (NC) 选 3.3V） |
 | **GND** | - | - | Pin 1, 4, 6, 20, 24, 41, 42 | Pin 31, 34, 41-44 | Pin 17, 21, 35, 37, 40-42 | 公共接地端 |
+
+### 2. 方案演进对照：单芯片（v1） vs BMD-340 模块（v2）
+
+| 差异点 | 单芯片方案（硬件 v1，≤ v1.0.30） | BMD-340 模块方案（硬件 v2，v1.0.31+，现行） |
+| :--- | :--- | :--- |
+| 主控集成形式 | nRF52840-QIAA **BGA 直焊**于 PCB，引脚以芯片**球位**标注（如 `G1` / `AD8`） | u-blox **BMD-340-A-R 模块**（68-pin LGA，内置 QIAA），引脚以**模块引脚**标注（如 `U8.48`） |
+| 引脚事实来源 | 旧原理图 `SCH_Schematic1_2026-07-09.pdf` | 原理图 v2 `Hardware/BMD 340SCH.pdf` / 网表 `BMD 340SCH.tel` |
+| 重映射触发因素 | - | BMD-34x **受限引脚**（<10kHz 低频 I/O）约束：PS/2（10~16.7kHz）与矩阵列驱动必须落在标准驱动引脚 |
+| 键盘矩阵 / 排线 | 与 v2 相同（FPC3/U2/FPC2 连接器信号不变） | 与 v1 相同（重映射仅发生在 MCU 侧） |
+
+**仅以下 8 个信号的 MCU GPIO 在两次方案间被重映射**（其余 30+ 信号 GPIO 不变）：
+
+| 信号 | 单芯片方案 GPIO（球位） | BMD-340 方案 GPIO（模块引脚） | 重映射说明（v1.0.31 / v1.0.33） |
+| :--- | :--- | :--- | :--- |
+| **KEY_SENSE0** | `P0.26`（G1） | `P1.05`（U8.48） | v1.0.33 与 DRV4 交换（行输入低频，受限引脚合规） |
+| **KEY_DRV4** | `P1.01`（Y23） | `P0.26`（U8.7） | v1.0.33 受限→标准（列驱动需标准驱动引脚） |
+| **KEY_DRV13** | `P1.05`（T23） | `P1.09`（U8.52） | v1.0.33 受限→标准（与 TP4_RESET 交换） |
+| **KEY_DRV15** | `P1.03`（V23） | `P0.08`（U8.24） | v1.0.31 受限→标准（与 CHG_INT 互换） |
+| **TP4CLK** | `P1.13`（A16） | `P0.06`（U8.22） | v1.0.31 受限→标准（PS/2 时钟 10~16.7kHz） |
+| **TP4DATA** | `P1.10`（A20） | `P0.11`（U8.27） | v1.0.31 受限→标准（PS/2 数据） |
+| **TP4_RESET** | `P1.09`（R1） | `P1.01`（U8.57） | v1.0.33 与 DRV13 交换（静态复位信号，受限合规） |
+| **CHG_INT** | `P0.08`（N1） | `P1.03`（U8.59） | v1.0.31 与 DRV15 互换（静态低频输入，受限合规） |
 
 ---
 
 ## 📦 核心元器件选型总结
 
-1.  **主控 MCU**：`nRF52840-QIAA-R0` (aQFN73 封装)。支持蓝牙 5.4 和 USB 2.0，提供 48 个 GPIO。配置为 Normal Voltage 模式，短接 VDDH 与 VDD，关闭内部高电压调节器 (REG0)。
+1.  **主控 MCU**：`nRF52840-QIAA-R0`（BMD-340 模块，68-pin LGA）。支持蓝牙 5.4 和 USB 2.0，提供 48 个 GPIO。配置为 Normal Voltage 模式，短接 VDDH 与 VDD，关闭内部高电压调节器 (REG0)。
 2.  **稳压 LDO**：`RT9080-33GJ5` (或 SGM2036-3.3)，TSOT-23-5 封装。超低静态电流 **Iq = 2µA**，最大持续输出电流 **600mA**，低压差 (dropout)，完美契合低功耗无线设计。
 3.  **锂电池充电芯片**：`TP4054-42-SOT25R` (SOT-25-5 封装)，线性充电芯片。PROG 电阻配合为 **2k ohm**，设定 500mA 恒流充电（不可使用不匹配的 51k ohm 电阻）。
 4.  **5V Boost 升压芯片**：`ETA1061V50S2G` (SOT-23-6 封装)，高效同步整流 DC-DC 升压芯片。提供 5.0V 稳定输出（兼容 5V 小红帽和 T61 键盘供电）。具备超低静态电流与 **True Shutdown (真关断)** 功能，在 EN 拉低时完全阻断并隔离负载与输入，避免产生静态漏电。
@@ -110,9 +134,9 @@ ZMK 固件通过以下组合按键与底层驱动逻辑支持设备管理与电�
 *   **电池电量阶梯保护与 RG 指示策略**：
     *   **电池电压 < 3.4V**：红色电量灯快速闪烁 5 次，随后强制进入 **System Off** 关断键盘工作，保护电池。
     *   **唤醒电量提示**：每次唤醒时，指示灯常亮 **5 秒** 展示电量状态（`< 3.5V` 亮红灯，`≥ 3.5V` 亮绿灯），随后自动熄灭以节能。
-    *   **USB 充电状态**：插入 USB 时，红灯常亮代表正在充电，绿灯常亮代表充电完成（由 `CHG_INT` (`P0.08`) 智能读取）。
+    *   **USB 充电状态**：插入 USB 时，红灯常亮代表正在充电，绿灯常亮代表充电完成（由 `CHG_INT` (`P1.03`) 智能读取）。
 *   **小红帽 (TrackPoint) 驱动集成**：
-    *   基于 `kb_zmk_ps2_mouse_trackpoint_driver (by tails-dev, 适配主线 ZMK 编译)` 驱动模块，时钟引脚绑定 `P1.13`，数据引脚绑定 `P1.10`，复位引脚绑定 `P1.09` (低电平复位)，开启 `CONFIG_ZMK_POINTING=y` 实现高灵敏度原生鼠标输出。
-*   **蓝牙配对模式**：使用组合键 **Hotkey + Power Switch** 进入配对广播状态。
+    *   基于本地化的 PS/2 TrackPoint 驱动（`module/drivers/`，源自 tails-dev `kb_zmk_ps2_mouse_trackpoint_driver`，适配主线 ZMK），时钟引脚绑定 `P0.06`，数据引脚绑定 `P0.11`，复位引脚绑定 `P1.01` (低电平复位)，开启 `CONFIG_ZMK_POINTING=y` 实现高灵敏度原生鼠标输出。
+*   **蓝牙配对模式**：使用组合键 **Hotkey + Power Switch** 切换到配对槽位 0 并触发广播（若槽位 0 尚未配对则进入配对广播；若已配对则回连该槽位，**不会**清除任何配对）。配对新设备时请先选择一个未配对槽位：**Hotkey + Power**（槽位 0）或 **Hotkey + 1/2/3/4/5**（槽位 0-4，见下）。
 *   **多槽位蓝牙设备切换**：使用 **Hotkey + 1 / 2 / 3 / 4 / 5** 切换到不同的蓝牙配对配置文件 (Profile 0 - 4)。
 *   **双模切换**：支持 USB 与蓝牙双模，自动检测 USB 连接状态并优先使用有线传输。

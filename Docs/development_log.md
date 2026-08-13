@@ -365,3 +365,34 @@
 3. **修复方案**：移除全部 16 个 `col-gpios` 中的 `| GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH`，恢复为 `GPIO_ACTIVE_LOW`（#73 及之前的可用状态）。nRF52840 默认标准驱动（约 0.5mA 灌电流保证值）足以覆盖同列 1~2 键同按（内部上拉 13kΩ，单键约 0.25mA）；BMD-340 模块的 16 个列驱动均已映射至标准驱动引脚（v1.0.33），模块级驱动能力有保证。
 4. **后续选项**：若仍需 14mA 高驱动档，需等待 ZMK 升级 Zephyr ≥4.2（DTS `GPIO_DS_ALT_LOW/HIGH` 可用），或在 `board.c` 中直接操作 `NRF_P0->PIN_CNF[n].DRIVE` 寄存器（注意 ZMK kscan 运行时会重新 `gpio_pin_configure` 覆盖，需在 kscan 初始化完成后再设置，复杂度较高，暂不采用）。
 5. **验证**：修复提交推送后触发 CI，Build #78 预期通过（devicetree 解析错误消除）。
+
+### [2026-08-13] v1.0.35 — 依据 code review-2026-08-13 修复全部确定性缺陷
+1. **背景**：对 `bmd340-module` 分支（HEAD `3db7c0c`）进行了三轮交叉审查（对照 BMD-340 数据手册 UBX-19033353 与网表 `BMD 340SCH.tel`），整合为 `Docs/review-2026-08-13.md`，本条目修复其中全部确定性 Bug 与工程问题，并通过本地 west + Zephyr SDK 编译验证。
+2. **第一批（确定性 Bug）**：
+   - **1.3 采样率越界读**：`zmk_mouse_ps2_set_sampling_rate` 将 `sizeof(allowed_sampling_rates)`（28 字节）当作元素个数，越界访问数组；改用 `ARRAY_SIZE()`，数组声明为 `static const int[]`。
+   - **1.4 按键 sync 标志**：`zmk_mouse_ps2_activity_click_buttons` 中 `buttons_need_reporting--` 无条件执行，导致只有右键/中键变化时 sync 恒为 false，事件滞留缓冲区直到移动才送出；改为仅在触发的分支内递减。
+   - **1.2 UART 写互斥锁多次释放**：`ps2_uart.c` 同一把 `ps2_uart_write_mutex` 被解锁 3 次（write_byte 末尾 / write_byte_start / write_finish，后者在 ISR/工作队列上下文），并发写保护失效；对齐 `ps2_gpio.c`，锁/解锁仅在 `ps2_uart_write_byte()` 内各一次。
+   - **1.7 滚轮符号扩展**：`packet.scroll = packet_extra - ((packet.scroll << 3) & 0x100)` 中 `(packet.scroll<<3)&0x100` 恒 0，负向滚轮 0x08~0x0F 被解码为 +8~+15；改为 `(int8_t)(packet_extra << 4) >> 4` 做 4-bit 带符号扩展，并删除三行无意义 SET_BIT 死代码。
+   - **2.2 missed-interrupt 缺 return**：`ps2_gpio_read_interrupt_handler` 超时 abort 后未 return，会把失效边沿误当新帧 start bit；补 `return`。
+   - **2.3 dt_flags 复制粘贴错误**：`ps2_gpio_init_gpio` 第二行误写 `scl_gpio.dt_flags = 0`，改为 `sda_gpio.dt_flags = 0`。
+   - **2.7 错误码恒打印 0**：`zmk_mouse_ps2_send_cmd` 失败日志用局部 `err`（恒 0），改用 `resp.err`。
+3. **第二批（配置/工程）**：
+   - **1.5 Kconfig 补齐**：`module/Kconfig` 新增 `PS2_LOG_LEVEL`、`ZMK_INPUT_MOUSE_PS2_ENABLE_ERROR_MITIGATION`、`PS2_GPIO/UART_ENABLE_PS2_RESEND_CALLBACK`、`ZMK_INPUT_MOUSE_PS2_ENABLE_PS2_RESEND_CALLBACK`、`PS2_GPIO_INTERRUPT_LOG_ENABLED`；此前这些被驱动代码引用的选项未定义，误码抑制/重发回调等功能被静默关闭。
+   - **1.6 west.yml 锁定版本**：`revision: main` → 固定提交 `6e2ef41e022d555b10f116e395832913f71717b3`（2026-08-10 main HEAD，本项目验证基线；ZMK 官方 release tag 为 v0.1.0~v0.3.0），构建可复现，升级走显式提交。
+   - **2.1 回调单字节缓冲竞争**：`ps2_gpio.c` / `ps2_uart.c` 的 `callback_byte` 单槽改为 32 槽 `K_MSGQ` FIFO；ISR 侧 `k_msgq_put(K_NO_WAIT)`，worker 侧循环排空 + 排空后复查再提交，消除"丢字节→重发"循环。
+   - **2.5 回调队列 K_FOREVER 阻塞**：按键上报 `input_report_key(..., K_FOREVER)` 改为 `K_NO_WAIT`（与移动上报一致）。
+   - **2.10 scale-divisor 除零/溢出**：`input_listener_ps2.c` 加 `scale_divisor == 0` 守卫，中间计算改 `int32_t`。
+   - **2.11 LED 线程栈**：`status_leds.c` 栈 512 → 1024，defconfig 开启 `CONFIG_THREAD_STACK_INFO` 供实测。
+   - **2.15 TrackPoint 参数调节行为未编译**：板级 DTS 新增 `zmk,behavior-mouse-setting` 节点实例（`&mms` 行为此前因无 devicetree 节点导致 `dt_compat_enabled` 为假、驱动完全不编译）。
+   - **2.18 低电量关机未设 GPREGRET**：低电量 `sys_poweroff()` 前置位 `MANUAL_POWER_OFF_FLAG`，防包里误触反复"唤醒→低电→关机"放电。
+4. **第三批（工程整理）**：
+   - **1.8 README 引脚表**：按当前 DTS + 网表重写全部 16 列/8 行/PS2/指示灯引脚（BMD-340 模块引脚 U8.x），并注明"改 DTS 必须同步 README"。
+   - **2.4 LED 定义重复 / caps lock 双所有权**：删除 DTS 中从未被引用的 5 个 LED 节点（bt/bat_r/bat_g/mute/mic_mute，实际由 status_leds.c 裸 GPIO 驱动）；caps lock P0.31 交还 `zmk,indicator-leds` 独占，board.c 开机灯序与 status_leds.c 关机灯序不再操作 P0.31；新建 `board_hw.h` 统一引脚宏与 `MANUAL_POWER_OFF_FLAG`（原两处重复定义）。
+   - **2.6 lint.yml 反模式**：移除 clang-format 自动回写 + auto-commit（fork PR 会因 token 只读失败），改为 `--dry-run --Werror` 检查即报错；仓库根新增 `.clang-format`（LLVM + 2 空格 + K&R 大括号，匹配现有风格），并已用 clang-format-15 规范化全部模块源码。
+   - **2.8 死代码**：删除 `ps2_uart.c` 的 `ps2_uart_write_byte_debug()`（100ms 忙等 bit-bang，恒返回 -1）与 `log_binary()`；`input_listener_ps2.c` 删除空函数 `handle_abs_code()` 及 UROB 死条件 `#if/#else`（两分支完全相同）。
+   - **2.9 transform 重复矩阵坐标**：Unused 行 8 组重复 `RC()` 改为唯一坐标（含 `RC(5,15)` 行3/行5 重复），map 长度保持 130，消除 Studio 幽灵键。
+   - **2.12 CI 产物与 CDC 冲突**：`build.yml` `create-full-image` 增加产物存在性检查（上游 artifact 命名变化不再静默失败）；`build.yaml` 移除 `zmk-usb-logging`（与 `studio-rpc-usb-uart` 共用 CDC ACM 口会帧交错），保留 Studio USB。
+   - **2.16/2.17 PWRSWITCH 键值**：默认层 `&kp C_PWR` → `&none`（电源键只做本机开关机，不向主机发 HID 电源键）；bt 层 `&bt BT_CLR` → `&bt BT_SEL 0`（不再破坏性清除配对，未配对槽位自动广播），README 同步描述。
+   - **3.2/3.4 杂项**：`gpio-ps2.yaml` 的"I2C bus"描述改为 PS/2；`zmk,input-listener.yaml` 重命名为 `zmk,input-listener-ps2.yaml`；`zmk,input-mouse-ps2.yaml` 删除驱动未读取的误导性 `layer-toggle` 属性；`settings_log` 拼写 `tp-tp-press-to-select-threshold` 修正；`init_thread` 的 `int` 强转指针改为直接传 `const struct device *`；`BOOT_DISPLAY_TICKS` 注释 5s→4.8s；`behavior_mouse_setting.c` 多余分号；`thinkpad_wireless.conf` 增加 `CONFIG_ZMK_BATTERY_REPORT_INTERVAL=10`（需求 10 秒检测，默认 60s 会滞后低电关机）；`merge_hex.py` `app_size` 按地址跨度 `max-min+1` 计算。
+5. **矩阵驱动方式（review 1.1）**：按决策记录**保留推挽 + 中断驱动**设定，待 PCBA 实机验证；若出现 v1.0.29 记载的倒灌现象（左侧键区无响应 / 同列 ≥2 键异常），再切换 `GPIO_OPEN_DRAIN`（可配 `GPIO_PULL_UP`）。
+6. **验证**：本地 `west` + Zephyr SDK 0.17.0（Zephyr 4.1.0+zmk-fixes）对 `thinkpad_wireless` 板完整编译通过；`clang-format-15 --dry-run --Werror` 全模块源码零违规；transform map 130 项无重复坐标。
