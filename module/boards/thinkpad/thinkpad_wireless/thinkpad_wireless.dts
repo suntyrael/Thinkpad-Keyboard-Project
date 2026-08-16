@@ -30,6 +30,7 @@
         zephyr,sram = &sram0;
         zephyr,flash = &flash0;
         zephyr,code-partition = &code_partition;
+        zephyr,settings = &storage_partition;
         zmk,kscan = &kscan0;
         zmk,battery = &vbatt;
         zmk,physical-layout = &physical_layout0;
