@@ -2,9 +2,9 @@
 include:
   - board: thinkpad_wireless
     # studio-rpc-usb-uart: ZMK Studio 通过 USB 虚拟串口连接。
+    # zmk-usb-logging: 将 ZMK 系统 log 输出到 USB CDC ACM 串口（电脑串口终端可见）。
     #
-    # NOTE: zmk-usb-logging 已移除 —— Studio RPC 与 USB 日志共用同一个
-    # CDC ACM 口，两者会互相交错误码文本与 Studio 二进制 RPC 帧
-    # （review 2026-08-13 item 2.12）。需要串口日志调试时，在本地构建
-    # 追加 snippet: zmk-usb-logging（并临时去掉 studio-rpc-usb-uart）。
-    snippet: studio-rpc-usb-uart
+    # NOTE: review 2.12 曾移除 zmk-usb-logging（与 Studio RPC 共用同一 CDC ACM
+    # 口，帧会互相交错）；2026-08-16 按调试需求恢复两者并存。若串口输出异常
+    # （Studio 二进制帧乱码），本地调试时临时改为二选一即可。
+    snippet: studio-rpc-usb-uart zmk-usb-logging
