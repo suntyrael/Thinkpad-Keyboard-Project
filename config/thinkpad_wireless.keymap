@@ -13,7 +13,7 @@
         /* ZMK Studio unlock: Q + P + J pressed together (user-defined
          * unlock key, 2026-08-16). positions: Q=33, P=42, J=55. */
         combo_studio_unlock {
-            timeout-ms = <50>;
+            timeout-ms = <150>;
             key-positions = <33 42 55>;
             bindings = <&studio_unlock>;
         };
