@@ -328,7 +328,7 @@ int ps2_gpio_configure_pin_scl(gpio_flags_t flags, char *descr) {
 }
 
 int ps2_gpio_configure_pin_scl_input() {
-  return ps2_gpio_configure_pin_scl((GPIO_INPUT), "input");
+  return ps2_gpio_configure_pin_scl((GPIO_INPUT | GPIO_PULL_UP), "input");
 }
 
 int ps2_gpio_configure_pin_scl_output() {
@@ -348,7 +348,7 @@ int ps2_gpio_configure_pin_sda(gpio_flags_t flags, char *descr) {
 }
 
 int ps2_gpio_configure_pin_sda_input() {
-  return ps2_gpio_configure_pin_sda((GPIO_INPUT), "input");
+  return ps2_gpio_configure_pin_sda((GPIO_INPUT | GPIO_PULL_UP), "input");
 }
 
 int ps2_gpio_configure_pin_sda_output() {

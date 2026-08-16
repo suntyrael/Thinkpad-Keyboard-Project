@@ -35,3 +35,14 @@ CONFIG_BT_DEVICE_NAME="ThinkpadWL"
 # Track per-thread stack usage so the status_leds thread (raised to 1024 B)
 # can be verified against actual usage (review 2026-08-13 item 2.11).
 CONFIG_THREAD_STACK_INFO=y
+
+# ----- Persistent Settings (NVS backend) -----
+# ZMK Studio (CONFIG_ZMK_STUDIO) selects CONFIG_SETTINGS, but without an NVS
+# backend + zephyr,settings partition, settings writes fail (bt_gatt: Failed
+# to save Database Hash err -2, Unable to store name, no persistent BLE bonds).
+# Matches the ZMK reference board template (nrf5340dk).
+CONFIG_FLASH=y
+CONFIG_FLASH_PAGE_LAYOUT=y
+CONFIG_FLASH_MAP=y
+CONFIG_NVS=y
+CONFIG_SETTINGS_NVS=y
