@@ -10,11 +10,11 @@
  * The ZMK event manager guarantees that listeners are called after full init.
  *
  * LED hardware (all active-LOW):
- *   P1.02  BT_LED        — Bluetooth status
- *   P1.06  BAT_LED_R     — Battery / charger Red
- *   P1.04  BAT_LED_G     — Battery / charger Green
- *   P0.08  CHG_INT       — Charger IC interrupt: LOW = charging, HIGH = done
- *   P0.29  Power LED     — Driven by PWM0 Channel 0 (breathing light effect)
+ *   P1.02  BT_LED     - Bluetooth status
+ *   P1.06  BAT_LED_R  - Battery / charger Red
+ *   P1.04  BAT_LED_G  - Battery / charger Green
+ *   P0.08  CHG_INT    - Charger IC interrupt: LOW = charging, HIGH = done
+ *   P0.29  Power LED  - Driven by PWM0 Channel 0 (breathing light effect)
  */
 
 #include <zephyr/device.h>
@@ -33,6 +33,8 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/ble_active_profile_changed.h>
 
+#include "board_hw.h"
+
 /* --------------------------------------------------------------------------
  * Device specs
  * -------------------------------------------------------------------------- */
@@ -41,19 +43,11 @@ static const struct device *gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
 static const struct pwm_dt_spec pwm_led =
     PWM_DT_SPEC_GET(DT_NODELABEL(pwm_led_power));
 
-/* --------------------------------------------------------------------------
- * Pin definitions
- * -------------------------------------------------------------------------- */
-#define BT_LED_PIN 2    /* P1.02  gpio1 */
-#define BAT_LED_R_PIN 6 /* P1.06  gpio1 */
-#define BAT_LED_G_PIN 4 /* P1.04  gpio1 */
-#define CHG_INT_PIN 8   /* P0.08  gpio0 */
-#define MANUAL_POWER_OFF_FLAG 0xAA
-
 /* Active-LOW LED helpers — set physical pin directly (no polarity abstraction)
  */
-#define LED_ON(dev, pin) gpio_pin_set(dev, pin, 0) /* physical LOW  — LED on \
-                                                    */
+#define LED_ON(dev, pin)                                                       \
+  gpio_pin_set(dev, pin, 0) /* physical LOW  — LED on                        \
+                             */
 #define LED_OFF(dev, pin)                                                      \
   gpio_pin_set(dev, pin, 1) /* physical HIGH — LED off */
 
@@ -67,9 +61,11 @@ static volatile bool is_idle = false;
 /* --------------------------------------------------------------------------
  * LED worker thread
  * -------------------------------------------------------------------------- */
-#define LED_THREAD_STACK_SIZE 512
+#define LED_THREAD_STACK_SIZE 1024
 #define LED_THREAD_PRIORITY 7
-#define BOOT_DISPLAY_TICKS 10 /* show battery level for 5 s after boot */
+/* Battery level shown for ~4.8 s after boot (10 ticks * 6 * 80 ms)
+ * (review 2026-08-13 item 3.2). */
+#define BOOT_DISPLAY_TICKS 10
 
 K_THREAD_STACK_DEFINE(led_stack, LED_THREAD_STACK_SIZE);
 static struct k_thread led_thread_data;
@@ -89,44 +85,43 @@ static void led_thread_fn(void *a, void *b, void *c) {
 
   while (1) {
     /* ---- Manual Power-Off Button Check (Hold for 8 seconds) ---- */
-    if (gpio_pin_get_raw(gpio1_dev, 11) == 0) { /* Pressed (active-LOW) */
+    if (gpio_pin_get_raw(gpio1_dev, PWRSWITCH_PIN) ==
+        0) { /* Pressed (active-LOW) */
       pwr_press_ticks++;
       if (pwr_press_ticks >= 100) { /* 100 * 80ms = 8000ms = 8 seconds */
         /* Set manual power off flag in GPREGRET */
         NRF_POWER->GPREGRET = MANUAL_POWER_OFF_FLAG;
 
-        /* Turn all LEDs ON first */
-        gpio_pin_set_raw(gpio1_dev, 2, 0);  /* BT LED ON */
-        gpio_pin_set_raw(gpio1_dev, 4, 0);  /* Battery Green ON */
-        gpio_pin_set_raw(gpio1_dev, 6, 0);  /* Battery Red ON */
-        gpio_pin_set_raw(gpio1_dev, 7, 0);  /* Mic Mute ON */
-        gpio_pin_set_raw(gpio1_dev, 15, 0); /* Mute ON */
-        gpio_pin_set_raw(gpio0_dev, 31, 0); /* Caps Lock ON */
+        /* Turn all LEDs ON first (caps lock LED is owned by the indicator
+         * driver and is left alone, review 2026-08-13 item 2.4) */
+        gpio_pin_set_raw(gpio1_dev, BT_LED_PIN, 0);       /* BT LED ON */
+        gpio_pin_set_raw(gpio1_dev, BAT_LED_G_PIN, 0);    /* Green ON */
+        gpio_pin_set_raw(gpio1_dev, BAT_LED_R_PIN, 0);    /* Red ON */
+        gpio_pin_set_raw(gpio1_dev, MIC_MUTE_LED_PIN, 0); /* Mic Mute ON */
+        gpio_pin_set_raw(gpio1_dev, MUTE_LED_PIN, 0);     /* Mute ON */
         if (pwm_is_ready_dt(&pwm_led)) {
           pwm_set_pulse_dt(&pwm_led, pwm_led.period); /* Power LED ON */
         }
         k_msleep(300);
 
-        /* Sequential turn-off: BT, Green, Red, Mic Mute, Mute, Caps Lock */
-        gpio_pin_set_raw(gpio1_dev, 2, 1); /* BT OFF */
+        /* Sequential turn-off: BT, Green, Red, Mic Mute, Mute */
+        gpio_pin_set_raw(gpio1_dev, BT_LED_PIN, 1); /* BT OFF */
         k_msleep(150);
-        gpio_pin_set_raw(gpio1_dev, 4, 1); /* Battery Green OFF */
+        gpio_pin_set_raw(gpio1_dev, BAT_LED_G_PIN, 1); /* Green OFF */
         k_msleep(150);
-        gpio_pin_set_raw(gpio1_dev, 6, 1); /* Battery Red OFF */
+        gpio_pin_set_raw(gpio1_dev, BAT_LED_R_PIN, 1); /* Red OFF */
         k_msleep(150);
-        gpio_pin_set_raw(gpio1_dev, 7, 1); /* Mic Mute OFF */
+        gpio_pin_set_raw(gpio1_dev, MIC_MUTE_LED_PIN, 1); /* Mic Mute OFF */
         k_msleep(150);
-        gpio_pin_set_raw(gpio1_dev, 15, 1); /* Mute OFF */
-        k_msleep(150);
-        gpio_pin_set_raw(gpio0_dev, 31, 1); /* Caps Lock OFF */
+        gpio_pin_set_raw(gpio1_dev, MUTE_LED_PIN, 1); /* Mute OFF */
         if (pwm_is_ready_dt(&pwm_led)) {
           pwm_set_pulse_dt(&pwm_led, 0); /* Power LED OFF */
         }
         k_msleep(150);
 
         /* Cut off 5V Boost (P0.12) */
-        gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
-        gpio_pin_set(gpio0_dev, 12, 0);
+        gpio_pin_configure(gpio0_dev, BOOST_EN_PIN, GPIO_OUTPUT_LOW);
+        gpio_pin_set(gpio0_dev, BOOST_EN_PIN, 0);
 
         /* Go to System OFF */
         sys_poweroff();
@@ -151,9 +146,17 @@ static void led_thread_fn(void *a, void *b, void *c) {
         LED_OFF(gpio1_dev, BAT_LED_R_PIN);
         k_msleep(100);
       }
+
+      /* Store the manual power-off flag so that a wake from any stray key
+       * press in a bag cannot run the full wake -> low-battery -> shutdown
+       * cycle again and drain the remaining charge (review 2026-08-13 item
+       * 2.18). The next boot requires a deliberate 2-second power-button
+       * hold; if USB power is present the board stays on after that. */
+      NRF_POWER->GPREGRET = MANUAL_POWER_OFF_FLAG;
+
       /* Turn off 5V Boost (Trackpoint power) to prevent over-discharge */
-      gpio_pin_configure(gpio0_dev, 12, GPIO_OUTPUT_LOW);
-      gpio_pin_set(gpio0_dev, 12, 0);
+      gpio_pin_configure(gpio0_dev, BOOST_EN_PIN, GPIO_OUTPUT_LOW);
+      gpio_pin_set(gpio0_dev, BOOST_EN_PIN, 0);
 
       /* Turn off all LEDs and go to System OFF */
       LED_OFF(gpio1_dev, BT_LED_PIN);
@@ -276,7 +279,7 @@ static int status_leds_init(void) {
   }
 
   /* Configure PWRSWITCH (P1.11) as input pull-up for safety */
-  gpio_pin_configure(gpio1_dev, 11, GPIO_INPUT | GPIO_PULL_UP);
+  gpio_pin_configure(gpio1_dev, PWRSWITCH_PIN, GPIO_INPUT | GPIO_PULL_UP);
 
   /* Seed state from current ZMK values */
   bt_connected = zmk_ble_active_profile_is_connected();

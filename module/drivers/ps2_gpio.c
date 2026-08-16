@@ -25,6 +25,12 @@ LOG_MODULE_REGISTER(ps2_gpio);
 
 #define PS2_GPIO_DATA_QUEUE_SIZE 100
 
+// FIFO for bytes handed to the PS/2 callback. A single byte slot was
+// overwritten when a new byte arrived before the callback worker ran
+// (lost byte -> packet misalignment -> resend loop); 32 slots absorb the
+// worst-case burst (review 2026-08-13 item 2.1).
+#define PS2_GPIO_CALLBACK_QUEUE_SIZE 32
+
 // Custom queue for background PS/2 processing work at low priority
 // We purposefully want this to be a fairly low priority, because
 // this queue is used while we wait to start a write.
@@ -166,7 +172,9 @@ struct ps2_gpio_data {
 
   // PS2 driver interface callback
   struct k_work callback_work;
-  uint8_t callback_byte;
+  struct k_msgq callback_queue;
+  char callback_queue_buffer[PS2_GPIO_CALLBACK_QUEUE_SIZE];
+  bool callback_work_pending;
   ps2_callback_t callback_isr;
 
 #if IS_ENABLED(CONFIG_PS2_GPIO_ENABLE_PS2_RESEND_CALLBACK)
@@ -211,7 +219,6 @@ static const struct ps2_gpio_config ps2_gpio_config = {
 };
 
 static struct ps2_gpio_data ps2_gpio_data = {
-    .callback_byte = 0x0,
     .callback_isr = NULL,
 
 #if IS_ENABLED(CONFIG_PS2_GPIO_ENABLE_PS2_RESEND_CALLBACK)
@@ -629,6 +636,9 @@ void ps2_gpio_read_interrupt_handler() {
 
     if (prev_cycle_delta_us > PS2_GPIO_TIMING_SCL_CYCLE_MAX) {
       ps2_gpio_read_abort(true, "missed interrupt");
+      // The abort already reset the read state; the current edge must not be
+      // mistaken for a fresh start bit (review 2026-08-13 item 2.2).
+      return;
     }
   }
 
@@ -785,8 +795,16 @@ void ps2_gpio_read_process_received_byte(uint8_t byte) {
     // Call callback from a worker to make sure the callback
     // doesn't block the interrupt.
     // Will call ps2_gpio_read_callback_work_handler
-    data->callback_byte = byte;
-    k_work_submit_to_queue(&ps2_gpio_work_queue_cb, &data->callback_work);
+    //
+    // FIFO the byte so a slow worker cannot lose a byte that
+    // arrives before it runs (review 2026-08-13 item 2.1).
+    int ret = k_msgq_put(&data->callback_queue, &byte, K_NO_WAIT);
+    if (ret != 0) {
+      LOG_WRN("PS/2 callback queue full, dropping byte 0x%x", byte);
+    } else if (!data->callback_work_pending) {
+      data->callback_work_pending = true;
+      k_work_submit_to_queue(&ps2_gpio_work_queue_cb, &data->callback_work);
+    }
   } else {
     ps2_gpio_data_queue_add(byte);
   }
@@ -794,9 +812,19 @@ void ps2_gpio_read_process_received_byte(uint8_t byte) {
 
 void ps2_gpio_read_callback_work_handler(struct k_work *work) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
+  uint8_t byte;
 
-  data->callback_isr(data->dev, data->callback_byte);
-  data->callback_byte = 0x0;
+  // Drain the whole FIFO so bytes are delivered in order. Re-submit if a
+  // byte arrived while we were draining (review 2026-08-13 item 2.1).
+  while (k_msgq_get(&data->callback_queue, &byte, K_NO_WAIT) == 0) {
+    data->callback_isr(data->dev, byte);
+  }
+
+  data->callback_work_pending = false;
+  if (k_msgq_num_used_get(&data->callback_queue) > 0) {
+    data->callback_work_pending = true;
+    k_work_submit_to_queue(&ps2_gpio_work_queue_cb, &data->callback_work);
+  }
 }
 
 void ps2_gpio_read_finish() {
@@ -1286,6 +1314,10 @@ static int ps2_gpio_enable_callback(const struct device *dev) {
   struct ps2_gpio_data *data = dev->data;
   data->callback_enabled = true;
 
+  // Drop stale bytes that arrived while the callback was disabled so the
+  // first enabled frame starts clean.
+  k_msgq_purge(&data->callback_queue);
+
   // LOG_DBG("Enabled PS2 callback.");
 
   ps2_gpio_data_queue_empty();
@@ -1316,7 +1348,7 @@ static int ps2_gpio_init_gpio(void) {
 
   // Overwrite any user-provided flags from the devicetree
   data->scl_gpio.dt_flags = 0;
-  data->scl_gpio.dt_flags = 0;
+  data->sda_gpio.dt_flags = 0;
 
   // Setup interrupt callback for clock line
   gpio_init_callback(&data->scl_cb_data, ps2_gpio_scl_interrupt_handler,
@@ -1361,6 +1393,10 @@ static int ps2_gpio_init(const struct device *dev) {
   k_msgq_init(&data->data_queue, data->data_queue_buffer,
               sizeof(struct ps2_gpio_data_queue_item),
               PS2_GPIO_DATA_QUEUE_SIZE);
+
+  // Init FIFO for bytes handed to the PS/2 callback
+  k_msgq_init(&data->callback_queue, data->callback_queue_buffer,
+              sizeof(uint8_t), PS2_GPIO_CALLBACK_QUEUE_SIZE);
 
   // Init semaphore for blocking writes
   k_sem_init(&data->write_lock, 0, 1);

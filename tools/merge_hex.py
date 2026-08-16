@@ -94,7 +94,11 @@ def mark_app_valid(merged, app_path):
       0xFF008 bank_0_size(uint32) = application size
     """
     app_data = parse_hex(app_path)
-    app_size = len(app_data)
+    # Use the address span (max-min+1) rather than the number of dictionary
+    # entries: if the hex has address holes, len() underestimates the app
+    # size that the bootloader uses for its bank validity/CRC checks
+    # (review 2026-08-13 item 3.4).
+    app_size = max(app_data) - min(app_data) + 1
     merged[ADAFRUIT_SETTINGS_ADDR + 0x0] = 0x01  # bank_0 low  (BANK_VALID_APP)
     merged[ADAFRUIT_SETTINGS_ADDR + 0x1] = 0x00
     merged[ADAFRUIT_SETTINGS_ADDR + 0x2] = 0x00  # bank_0_crc low

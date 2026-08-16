@@ -38,6 +38,13 @@ jobs:
         with:
           name: firmware
           path: fw
+      # Fail early with a clear message if the upstream build artifact or its
+      # naming changed, instead of silently producing a broken image
+      # (review 2026-08-13 item 2.12).
+      - name: Verify Artifacts Present
+        run: |
+          test -f fw/thinkpad_wireless-zmk.hex || { echo "::error::Expected artifact fw/thinkpad_wireless-zmk.hex not found; upstream workflow may have changed its artifact layout."; exit 1; }
+          test -f firmware/adafruit_bootloader_zmk.hex || { echo "::error::Bootloader firmware/adafruit_bootloader_zmk.hex missing from repo."; exit 1; }
       - name: Merge Bootloader + Application
         run: |
           python3 tools/merge_hex.py \

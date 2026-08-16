@@ -315,3 +315,84 @@
    * `module/drivers/input_mouse_ps2.c`：修正 `zmk_mouse_ps2_init_power_on_reset`，移除强行清零 `dt_flags` 的逻辑；上电复位开始时输出 0V (LOW) 维持 600ms 脉冲，复位结束后通过 `gpio_pin_set_raw(data->rst_gpio.port, data->rst_gpio.pin, 1)` 释放并保持为 **3.3V 高电平 (HIGH)**。
 4. **验证效果**：P1.09 顺利恢复为 3.3V 高电平，指点杆芯片正常退出复位模式。
 
+
+### [2026-08-12] v1.0.31 — 硬件更新：BMD-340 模块设计（引脚重映射至标准驱动 GPIO）
+1. **背景**：硬件设计改用 u-blox **BMD-340** 模块（内置 PCB 天线；与 BMD-341 仅天线形态不同，footprint 完全兼容，原理图与网表见 `Hardware/BMD 340SCH.pdf` / `BMD 340SCH.tel`）。BMD-34x 数据手册将 GPIO 分为两类：**标准驱动引脚**（支持 >10kHz 信号）与**受限引脚**（`P1.01-P1.07`、`P1.10-P1.15`、`P0.02/03/09/10/28-31`，标注 "Standard drive, low frequency I/O only (<10kHz)"）。原 PCB 设计中 PS/2 时钟/数据及矩阵列驱动恰好落在受限引脚上，超出其频率能力，必须重映射。
+2. **引脚重映射表**（`thinkpad_wireless.dts` / `board.c` / `status_leds.c`）：
+   | 信号 | 原引脚（受限） | 新引脚（标准驱动） | 说明 |
+   |---|---|---|---|
+   | TP4CLK（PS/2 时钟） | P1.13 | **P0.06**（模块 pin 22） | PS/2 时钟 10~16.7kHz，需标准驱动 GPIO |
+   | TP4DATA（PS/2 数据） | P1.10 | **P0.11**（模块 pin 27） | 同上 |
+   | DRV15（矩阵第 15 列驱动） | P1.03 | **P0.08**（模块 pin 24） | 列扫描输出，需标准驱动 GPIO |
+   | CHG_INT（充电状态） | P0.08 | **P1.03**（模块 pin 59） | 静态低频输入，移至受限引脚，与 DRV15 互换 |
+3. **修改点**：
+   * `module/boards/thinkpad/thinkpad_wireless/thinkpad_wireless.dts`：`scl-gpios` = `P0.06`、`sda-gpios` = `P0.11`；矩阵 `col-gpios` 第 16 列 (DRV15) 改为 `P0.08`（`GPIO_DS_ALT_LOW/HIGH` 14mA 高驱动配置保留）。
+   * `module/boards/thinkpad/thinkpad_wireless/board.c`：CHG_INT 初始化由 `gpio0 pin 8` 改为 `gpio1 pin 3`（上拉输入）。
+   * `module/boards/thinkpad/thinkpad_wireless/status_leds.c`：`CHG_INT_PIN` 宏由 `8 (gpio0)` 改为 `3 (gpio1)`，充放电状态读取随引脚迁移。
+4. **验证效果**：固件与 BMD-340 模块原理图网表对齐；高频信号（PS/2、列驱动）全部落在标准驱动引脚上，符合 BMD-34x 电气规范，避免受限引脚低频驱动能力不足导致的信号完整性问题。
+
+### [2026-08-12] v1.0.32 — 分支体系整理（bmd340-module 转正为默认分支，清理冗余远端分支）
+1. **背景**：BMD-340 模块化设计（BMD340-module 分支，基于 deepseekV4 增加 2 个提交：BMD-340 原理图/网表文档与引脚重映射）验收通过，决定将其转正为项目主分支。
+2. **Git 仓库整理**：
+   * 修复 `.git/config` 中错误的 fetch refspec（原先被限制为仅跟踪 `zmk-official-hwmv2-fix` 单分支，导致 `git fetch` 无法同步服务器上的其他分支），恢复为标准的 `+refs/heads/*:refs/remotes/origin/*` 通配规则。
+   * 推送 `bmd340-module` 至 GitHub，并通过 API 将仓库默认分支（原 `zmk-official-hwmv2-fix`）切换为 `bmd340-module`。
+   * 删除 GitHub 远端冗余分支：`main`、`zmk-official-hwmv2-fix`、`zmk-official`；同步清理本地 `zmk-official-hwmv2-fix` 分支及失效的远端跟踪引用（`origin/HEAD` 已自动更新指向 `origin/bmd340-module`）。
+3. **保留分支**：`deepseekV4`（nRF52840 14mA High Drive 调试分支）保留，以 git worktree 方式挂在项目内 `.worktrees/deepseekV4` 并行维护，与主分支互不干扰；`.worktrees/` 已加入 `.gitignore`。
+4. **最终分支状态**：远端与本地均仅保留 `bmd340-module`（默认分支，6053a66）与 `deepseekV4`（374e4be）两个分支。
+
+### [2026-08-12] v1.0.33 — 硬件 v2 与代码同步（DRV4/DRV13 交换至标准引脚，模块型号确认为 BMD-340）
+1. **背景**：v1.0.31 的引脚重映射只覆盖了 PS/2 与 DRV15，仍有 **DRV4 (P1.01)** 与 **DRV13 (P1.05)** 两个列驱动落在受限引脚（u-blox "Standard drive, low frequency I/O only (<10kHz)"，不保证高驱动档）。列驱动需 `GPIO_DS_ALT_LOW/HIGH` 14mA 高驱动输出，同列多键同按（≥3 键，约 0.75mA）时受限引脚可能出现灌电流不足。原理图更新为 v2，采用就近交换方案将 16 个列驱动全部移至标准驱动引脚。
+2. **硬件改动**（`Hardware/BMD 340SCH.pdf` / `.tel`，v2，diff 仅 4 个网络变化）：
+   | 信号 | 原引脚 | 新引脚（模块 pin） | 引脚性质 | 说明 |
+   |---|---|---|---|---|
+   | DRV4（列驱动） | P1.01（受限） | **P0.26**（pin 7，标准） | 受限→标准 | 与 SENSE0 交换 |
+   | DRV13（列驱动） | P1.05（受限） | **P1.09**（pin 52，标准） | 受限→标准 | 与 TP4_RESET 交换 |
+   | SENSE0（行输入） | P0.26（标准） | **P1.05**（pin 48，受限） | 标准→受限 | 矩阵行输入，kHz 级低频扫描，受限引脚合规 |
+   | TP4_RESET（PS/2 复位） | P1.09（标准） | **P1.01**（pin 57，受限） | 标准→受限 | 静态复位信号（上电脉冲后保持高电平），受限引脚合规 |
+   - **模块型号确认**：实际使用 **BMD-340-A-R**（内置 PCB 天线），非 BMD-341（U.FL 外接天线）。两者 footprint 完全一致（68-pin LGA，15.0×10.2×1.9mm，datasheet 原文 "The BMD-341 footprint is identical to the BMD-340"），引脚映射无差异，仅天线形态不同：BMD-340 需 PCB 天线净空区（上下无铜 + 下方接地平面），BMD-341 需 U.FL 座装配空间。原理图器件名 `BMD-341-A-R` 与 BOM 需更正为 `BMD-340-A-R`。
+3. **代码改动**（`thinkpad_wireless.dts`，与原理图 v2 对齐）：
+   * `row-gpios` SENSE0：`P0.26` → `P1.05`（`<&gpio1 5>`）。
+   * `col-gpios` DRV4：`P1.01` → `P0.26`（`<&gpio0 26>`，高驱动配置保留）。
+   * `col-gpios` DRV13：`P1.05` → `P1.09`（`<&gpio1 9>`，高驱动配置保留）。
+   * `mouse_ps2` 的 `rst-gpios`：`P1.09` → `P1.01`（`<&gpio1 1>`）。
+4. **文档与注释修正**：全部 10 处代码注释（`.dts`/`.c`）及开发日志 v1.0.31/v1.0.32 条目中的 `BMD-341` 更正为 `BMD-340`，并补充天线差异说明。
+5. **最终引脚状态**：16 个列驱动（DRV0~DRV15）全部落在标准驱动引脚；PS/2 CLK/DATA 在标准引脚（P0.06/P0.11）、RESET 在受限引脚（P1.01，静态合规）；CHG_INT 在 P1.03（受限，静态输入合规）；矩阵行输入与静态 LED 均按低频/静态用途分布于受限引脚，符合 BMD-34x 电气规范。
+6. **Git**：`bmd340-module` 分支已推送 GitHub（`origin/bmd340-module`，当前 HEAD `d3972d5`），GitHub Actions 自动触发 CI 编译验证。
+
+### [2026-08-13] v1.0.34 — 修复 CI 构建失败（GPIO_DS_ALT_LOW/HIGH 宏在 Zephyr 4.1 不可用）
+1. **问题现象**：GitHub Actions Build #74~#77 连续失败（`thinkpad_wireless.dts:97: devicetree error: parse error: expected number or parenthesized expression`）。#73 及之前成功。
+2. **根因分析**：失败始于 374e4be（"enable nRF52840 14mA High Drive (H0H1) for all DRV col-gpios"），该提交在全部 16 个 `col-gpios` 中加入了 `GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH` 驱动强度标志。核查 Zephyr v4.1.0（ZMK 4.4.1 所用版本）的 `include/zephyr/dt-bindings/gpio/gpio.h` 与 `include/zephyr/drivers/gpio.h`：**均不存在 GPIO_DS_* 宏**（驱动强度标志是 Zephyr 4.2+ 才引入的特性）。devicetree 解析器将未展开的宏视为非法表达式，导致构建在 DTS 解析阶段失败。与 BMD-340 模块改动无关（#74 即已失败，早于模块分支）。
+3. **修复方案**：移除全部 16 个 `col-gpios` 中的 `| GPIO_DS_ALT_LOW | GPIO_DS_ALT_HIGH`，恢复为 `GPIO_ACTIVE_LOW`（#73 及之前的可用状态）。nRF52840 默认标准驱动（约 0.5mA 灌电流保证值）足以覆盖同列 1~2 键同按（内部上拉 13kΩ，单键约 0.25mA）；BMD-340 模块的 16 个列驱动均已映射至标准驱动引脚（v1.0.33），模块级驱动能力有保证。
+4. **后续选项**：若仍需 14mA 高驱动档，需等待 ZMK 升级 Zephyr ≥4.2（DTS `GPIO_DS_ALT_LOW/HIGH` 可用），或在 `board.c` 中直接操作 `NRF_P0->PIN_CNF[n].DRIVE` 寄存器（注意 ZMK kscan 运行时会重新 `gpio_pin_configure` 覆盖，需在 kscan 初始化完成后再设置，复杂度较高，暂不采用）。
+5. **验证**：修复提交推送后触发 CI，Build #78 预期通过（devicetree 解析错误消除）。
+
+### [2026-08-13] v1.0.35 — 依据 code review-2026-08-13 修复全部确定性缺陷
+1. **背景**：对 `bmd340-module` 分支（HEAD `3db7c0c`）进行了三轮交叉审查（对照 BMD-340 数据手册 UBX-19033353 与网表 `BMD 340SCH.tel`），整合为 `Docs/review-2026-08-13.md`，本条目修复其中全部确定性 Bug 与工程问题，并通过本地 west + Zephyr SDK 编译验证。
+2. **第一批（确定性 Bug）**：
+   - **1.3 采样率越界读**：`zmk_mouse_ps2_set_sampling_rate` 将 `sizeof(allowed_sampling_rates)`（28 字节）当作元素个数，越界访问数组；改用 `ARRAY_SIZE()`，数组声明为 `static const int[]`。
+   - **1.4 按键 sync 标志**：`zmk_mouse_ps2_activity_click_buttons` 中 `buttons_need_reporting--` 无条件执行，导致只有右键/中键变化时 sync 恒为 false，事件滞留缓冲区直到移动才送出；改为仅在触发的分支内递减。
+   - **1.2 UART 写互斥锁多次释放**：`ps2_uart.c` 同一把 `ps2_uart_write_mutex` 被解锁 3 次（write_byte 末尾 / write_byte_start / write_finish，后者在 ISR/工作队列上下文），并发写保护失效；对齐 `ps2_gpio.c`，锁/解锁仅在 `ps2_uart_write_byte()` 内各一次。
+   - **1.7 滚轮符号扩展**：`packet.scroll = packet_extra - ((packet.scroll << 3) & 0x100)` 中 `(packet.scroll<<3)&0x100` 恒 0，负向滚轮 0x08~0x0F 被解码为 +8~+15；改为 `(int8_t)(packet_extra << 4) >> 4` 做 4-bit 带符号扩展，并删除三行无意义 SET_BIT 死代码。
+   - **2.2 missed-interrupt 缺 return**：`ps2_gpio_read_interrupt_handler` 超时 abort 后未 return，会把失效边沿误当新帧 start bit；补 `return`。
+   - **2.3 dt_flags 复制粘贴错误**：`ps2_gpio_init_gpio` 第二行误写 `scl_gpio.dt_flags = 0`，改为 `sda_gpio.dt_flags = 0`。
+   - **2.7 错误码恒打印 0**：`zmk_mouse_ps2_send_cmd` 失败日志用局部 `err`（恒 0），改用 `resp.err`。
+3. **第二批（配置/工程）**：
+   - **1.5 Kconfig 补齐**：`module/Kconfig` 新增 `PS2_LOG_LEVEL`、`ZMK_INPUT_MOUSE_PS2_ENABLE_ERROR_MITIGATION`、`PS2_GPIO/UART_ENABLE_PS2_RESEND_CALLBACK`、`ZMK_INPUT_MOUSE_PS2_ENABLE_PS2_RESEND_CALLBACK`、`PS2_GPIO_INTERRUPT_LOG_ENABLED`；此前这些被驱动代码引用的选项未定义，误码抑制/重发回调等功能被静默关闭。
+   - **1.6 west.yml 锁定版本**：`revision: main` → 固定提交 `6e2ef41e022d555b10f116e395832913f71717b3`（2026-08-10 main HEAD，本项目验证基线；ZMK 官方 release tag 为 v0.1.0~v0.3.0），构建可复现，升级走显式提交。
+   - **2.1 回调单字节缓冲竞争**：`ps2_gpio.c` / `ps2_uart.c` 的 `callback_byte` 单槽改为 32 槽 `K_MSGQ` FIFO；ISR 侧 `k_msgq_put(K_NO_WAIT)`，worker 侧循环排空 + 排空后复查再提交，消除"丢字节→重发"循环。
+   - **2.5 回调队列 K_FOREVER 阻塞**：按键上报 `input_report_key(..., K_FOREVER)` 改为 `K_NO_WAIT`（与移动上报一致）。
+   - **2.10 scale-divisor 除零/溢出**：`input_listener_ps2.c` 加 `scale_divisor == 0` 守卫，中间计算改 `int32_t`。
+   - **2.11 LED 线程栈**：`status_leds.c` 栈 512 → 1024，defconfig 开启 `CONFIG_THREAD_STACK_INFO` 供实测。
+   - **2.15 TrackPoint 参数调节行为未编译**：板级 DTS 新增 `zmk,behavior-mouse-setting` 节点实例（`&mms` 行为此前因无 devicetree 节点导致 `dt_compat_enabled` 为假、驱动完全不编译）。
+   - **2.18 低电量关机未设 GPREGRET**：低电量 `sys_poweroff()` 前置位 `MANUAL_POWER_OFF_FLAG`，防包里误触反复"唤醒→低电→关机"放电。
+4. **第三批（工程整理）**：
+   - **1.8 README 引脚表**：按当前 DTS + 网表重写全部 16 列/8 行/PS2/指示灯引脚（BMD-340 模块引脚 U8.x），并注明"改 DTS 必须同步 README"。
+   - **2.4 LED 定义重复 / caps lock 双所有权**：删除 DTS 中从未被引用的 5 个 LED 节点（bt/bat_r/bat_g/mute/mic_mute，实际由 status_leds.c 裸 GPIO 驱动）；caps lock P0.31 交还 `zmk,indicator-leds` 独占，board.c 开机灯序与 status_leds.c 关机灯序不再操作 P0.31；新建 `board_hw.h` 统一引脚宏与 `MANUAL_POWER_OFF_FLAG`（原两处重复定义）。
+   - **2.6 lint.yml 反模式**：移除 clang-format 自动回写 + auto-commit（fork PR 会因 token 只读失败），改为 `--dry-run --Werror` 检查即报错；仓库根新增 `.clang-format`（LLVM + 2 空格 + K&R 大括号，匹配现有风格），并已用 clang-format-15 规范化全部模块源码。
+   - **2.8 死代码**：删除 `ps2_uart.c` 的 `ps2_uart_write_byte_debug()`（100ms 忙等 bit-bang，恒返回 -1）与 `log_binary()`；`input_listener_ps2.c` 删除空函数 `handle_abs_code()` 及 UROB 死条件 `#if/#else`（两分支完全相同）。
+   - **2.9 transform 重复矩阵坐标**：Unused 行 8 组重复 `RC()` 改为唯一坐标（含 `RC(5,15)` 行3/行5 重复），map 长度保持 130，消除 Studio 幽灵键。
+   - **2.12 CI 产物与 CDC 冲突**：`build.yml` `create-full-image` 增加产物存在性检查（上游 artifact 命名变化不再静默失败）；`build.yaml` 移除 `zmk-usb-logging`（与 `studio-rpc-usb-uart` 共用 CDC ACM 口会帧交错），保留 Studio USB。
+   - **2.16/2.17 PWRSWITCH 键值**：默认层 `&kp C_PWR` → `&none`（电源键只做本机开关机，不向主机发 HID 电源键）；bt 层 `&bt BT_CLR` → `&bt BT_SEL 0`（不再破坏性清除配对，未配对槽位自动广播），README 同步描述。
+   - **3.2/3.4 杂项**：`gpio-ps2.yaml` 的"I2C bus"描述改为 PS/2；`zmk,input-listener.yaml` 重命名为 `zmk,input-listener-ps2.yaml`；`zmk,input-mouse-ps2.yaml` 删除驱动未读取的误导性 `layer-toggle` 属性；`settings_log` 拼写 `tp-tp-press-to-select-threshold` 修正；`init_thread` 的 `int` 强转指针改为直接传 `const struct device *`；`BOOT_DISPLAY_TICKS` 注释 5s→4.8s；`behavior_mouse_setting.c` 多余分号；`thinkpad_wireless.conf` 增加 `CONFIG_ZMK_BATTERY_REPORT_INTERVAL=10`（需求 10 秒检测，默认 60s 会滞后低电关机）；`merge_hex.py` `app_size` 按地址跨度 `max-min+1` 计算。
+5. **矩阵驱动方式（review 1.1）**：按决策记录**保留推挽 + 中断驱动**设定，待 PCBA 实机验证；若出现 v1.0.29 记载的倒灌现象（左侧键区无响应 / 同列 ≥2 键异常），再切换 `GPIO_OPEN_DRAIN`（可配 `GPIO_PULL_UP`）。
+6. **验证**：本地 `west` + Zephyr SDK 0.17.0（Zephyr 4.1.0+zmk-fixes）对 `thinkpad_wireless` 板完整编译通过；`clang-format-15 --dry-run --Werror` 全模块源码零违规；transform map 130 项无重复坐标。

@@ -20,8 +20,14 @@
                 &kp LSHFT  &kp Z      &kp X      &kp C      &kp V      &kp B      &kp N      &kp M      &kp COMMA  &kp DOT    &kp FSLH   &kp RSHFT  &kp UP     &trans     &trans     &trans
                 &kp LCTRL  &kp LWIN   &kp LALT   &trans     &trans     &kp SPACE  &trans     &trans     &kp RALT   &kp RCTRL  &kp LEFT   &kp DOWN   &kp RIGHT  &trans     &trans     &trans
                 &kp C_VOL_UP &kp C_VOL_DN &kp C_MUTE &kp C_MUTE &kp F13 &kp PG_UP &kp PG_DN  &kp C_AC_BACK &kp C_AC_FORWARD &kp PSCRN &kp SLCK &kp PAUSE_BREAK &trans &trans &trans &trans
+                /* NOTE: the 4th media key duplicates &kp C_MUTE - the board
+                 * has separate -LED_MUTE and -LEDMICMUTE_R signals, so this key
+                 * is likely the mic-mute key, but ZMK has no C_MIC_MUTE keycode
+                 * and the keycap legend is unverified (review 2026-08-13 3.4). */
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                &mo 1      &kp C_PWR  /* Row 8: HOTKEY(mo 1), PWRSWITCH(C_PWR) */
+                &mo 1      &none      /* Row 8: HOTKEY(mo 1), PWRSWITCH: local power
+                                         on/off only (long-press in board firmware);
+                                         no HID C_PWR to the host (review 2.16) */
             >;
         };
 
@@ -35,7 +41,10 @@
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                &trans     &bt BT_CLR /* Row 8: HOTKEY(mo 1), PWRSWITCH(bt BT_CLR) */
+                &trans     &bt BT_SEL 0 /* Row 8: HOTKEY(mo 1), PWRSWITCH:
+                                           select profile 0 & advertise if
+                                           unpaired (never erases a bond,
+                                           review 2.17) */
             >;
         };
     };

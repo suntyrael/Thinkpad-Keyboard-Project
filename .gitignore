@@ -11,3 +11,16 @@ Desktop.ini
 *.log
 __pycache__/
 nRF_Connect_Programmer_*.hex
+
+# git worktrees
+.worktrees/
+
+# Local west workspace (populated by `west init` + `west update`);
+# only zephyr/module.yml is tracked by this repo.
+.west/
+build/
+zmk/
+modules/
+optional/
+zephyr/*
+!zephyr/module.yml

@@ -31,3 +31,7 @@ CONFIG_BT_CTLR_ULL_LOW_PRIO=2
 # Since the board name "thinkpad_wireless" (17 chars) is too long for the default
 # BT GAP name (which must be < BT_DEVICE_NAME_MAX, i.e., <= 15 chars).
 CONFIG_BT_DEVICE_NAME="ThinkpadWL"
+
+# Track per-thread stack usage so the status_leds thread (raised to 1024 B)
+# can be verified against actual usage (review 2026-08-13 item 2.11).
+CONFIG_THREAD_STACK_INFO=y

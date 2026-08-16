@@ -123,10 +123,6 @@ static void handle_rel_code(struct input_listener_ps2_data *data,
   }
 }
 
-static void handle_abs_code(const struct input_listener_ps2_config *config,
-                            struct input_listener_ps2_data *data,
-                            struct input_event *evt) {}
-
 static void handle_key_code(const struct input_listener_ps2_config *config,
                             struct input_listener_ps2_data *data,
                             struct input_event *evt) {
@@ -184,8 +180,16 @@ filter_with_input_config(const struct input_listener_ps2_config *cfg,
     evt->value = -(evt->value);
   }
 
-  evt->value =
-      (int16_t)((evt->value * cfg->scale_multiplier) / cfg->scale_divisor);
+  // Guard against a scale-divisor of 0 and compute in int32_t so the
+  // multiplication cannot overflow before the division (review 2026-08-13
+  // item 2.10).
+  if (cfg->scale_divisor == 0) {
+    LOG_ERR("scale-divisor must not be 0; ignoring scaling");
+  } else {
+    int32_t scaled =
+        ((int32_t)evt->value * cfg->scale_multiplier) / cfg->scale_divisor;
+    evt->value = (int16_t)scaled;
+  }
 }
 
 static void clear_xy_data(struct input_listener_ps2_xy_data *data) {
@@ -207,9 +211,6 @@ static void input_handler_ps2(const struct input_listener_ps2_config *config,
   switch (evt->type) {
   case INPUT_EV_REL:
     handle_rel_code(data, evt);
-    break;
-  case INPUT_EV_ABS:
-    handle_abs_code(config, data, evt);
     break;
   case INPUT_EV_KEY:
     handle_key_code(config, data, evt);
@@ -288,15 +289,7 @@ void zmk_input_listener_ps2_layer_toggle_activate_layer(struct k_work *item) {
     LOG_INF("Activating layer %d due to mouse activity...",
             config->layer_toggle);
 
-#if IS_ENABLED(CONFIG_ZMK_INPUT_MOUSE_PS2_ENABLE_UROB_COMPAT)
-
     zmk_keymap_layer_activate(config->layer_toggle, false);
-
-#else
-
-    zmk_keymap_layer_activate(config->layer_toggle, false);
-
-#endif /* IS_ENABLED(CONFIG_ZMK_INPUT_MOUSE_PS2_ENABLE_UROB_COMPAT) */
 
     data->layer_toggle_layer_enabled = true;
   } else {

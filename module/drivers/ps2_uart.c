@@ -35,6 +35,11 @@ PINCTRL_DT_DEFINE(DT_INST_BUS(0));
 
 #define PS2_UART_DATA_QUEUE_SIZE 100
 
+// FIFO for bytes handed to the PS/2 callback (same rationale as the GPIO
+// driver: a single byte slot lost bytes when the worker ran late, review
+// 2026-08-13 item 2.1).
+#define PS2_UART_CALLBACK_QUEUE_SIZE 32
+
 // Custom queue for background PS/2 processing work at low priority
 // We purposefully want this to be a fairly low priority, because
 // this queue is used while we wait to start a write.
@@ -164,7 +169,9 @@ struct ps2_uart_data {
 
   // PS2 driver interface callback
   struct k_work callback_work;
-  uint8_t callback_byte;
+  struct k_msgq callback_queue;
+  char callback_queue_buffer[PS2_UART_CALLBACK_QUEUE_SIZE];
+  bool callback_work_pending;
   ps2_callback_t callback_isr;
 #if IS_ENABLED(CONFIG_PS2_UART_ENABLE_PS2_RESEND_CALLBACK)
   ps2_resend_callback_t resend_callback_isr;
@@ -201,7 +208,6 @@ static const struct ps2_uart_config ps2_uart_config = {
 };
 
 static struct ps2_uart_data ps2_uart_data = {
-    .callback_byte = 0x0,
     .callback_isr = NULL,
 
 #if IS_ENABLED(CONFIG_PS2_UART_ENABLE_PS2_RESEND_CALLBACK)
@@ -376,18 +382,6 @@ static int ps2_uart_set_mode_write() {
   ps2_uart_configure_pin_sda_output();
 
   return err;
-}
-
-void log_binary(uint8_t value) {
-  char binary_str[9];
-
-  for (int i = 7; i >= 0; --i) {
-    binary_str[7 - i] = PS2_UART_GET_BIT(value, i) ? '1' : '0';
-  }
-
-  binary_str[8] = '\0';
-
-  LOG_INF("Binary Value of 0x%x: %s", value, binary_str);
 }
 
 bool ps2_uart_get_byte_parity(uint8_t byte) {
@@ -642,8 +636,16 @@ void ps2_uart_read_process_received_byte(uint8_t byte) {
     // Call callback from a worker to make sure the callback
     // doesn't block the interrupt.
     // Will call ps2_uart_read_callback_work_handler
-    data->callback_byte = byte;
-    k_work_submit_to_queue(&ps2_uart_work_queue_cb, &data->callback_work);
+    //
+    // FIFO the byte so a slow worker cannot lose a byte that
+    // arrives before it runs (review 2026-08-13 item 2.1).
+    int ret = k_msgq_put(&data->callback_queue, &byte, K_NO_WAIT);
+    if (ret != 0) {
+      LOG_WRN("PS/2 callback queue full, dropping byte 0x%x", byte);
+    } else if (!data->callback_work_pending) {
+      data->callback_work_pending = true;
+      k_work_submit_to_queue(&ps2_uart_work_queue_cb, &data->callback_work);
+    }
   } else {
     ps2_uart_data_queue_add(byte);
   }
@@ -668,9 +670,19 @@ const char *ps2_uart_read_get_error_str(int err) {
 
 void ps2_uart_read_callback_work_handler(struct k_work *work) {
   struct ps2_uart_data *data = &ps2_uart_data;
+  uint8_t byte;
 
-  data->callback_isr(data->dev, data->callback_byte);
-  data->callback_byte = 0x0;
+  // Drain the whole FIFO so bytes are delivered in order. Re-submit if a
+  // byte arrived while we were draining (review 2026-08-13 item 2.1).
+  while (k_msgq_get(&data->callback_queue, &byte, K_NO_WAIT) == 0) {
+    data->callback_isr(data->dev, byte);
+  }
+
+  data->callback_work_pending = false;
+  if (k_msgq_num_used_get(&data->callback_queue) > 0) {
+    data->callback_work_pending = true;
+    k_work_submit_to_queue(&ps2_uart_work_queue_cb, &data->callback_work);
+  }
 }
 
 /*
@@ -710,81 +722,6 @@ void ps2_uart_write_finish(bool successful, char *descr);
 #define PS2_UART_E_WRITE_FAILURE 5
 
 K_MUTEX_DEFINE(ps2_uart_write_mutex);
-
-int ps2_uart_write_byte_debug(uint8_t byte) {
-  int err;
-
-  LOG_WRN("DEBUG WRITE STARTED for byte 0x%x", byte);
-
-  LOG_WRN("Setting Write mode");
-  err = ps2_uart_set_mode_write();
-  if (err != 0) {
-    LOG_ERR("Could not configure driver for write mode: %d", err);
-    return err;
-  }
-  // k_sleep(K_MSEC(1000));
-  // err = ps2_uart_set_mode_write();
-  // if (err != 0) {
-  //  LOG_ERR("Could not configure driver for write mode: %d", err);
-  //  return err;
-  // }
-  LOG_WRN("Setting Write mode: Done");
-
-  // Inhibit the line by setting clock low and data high for 100us
-  LOG_INF("Setting low");
-  ps2_uart_set_scl(0);
-  ps2_uart_set_sda(0);
-  k_sleep(K_MSEC(100));
-
-  LOG_INF("Setting high");
-  ps2_uart_set_scl(1);
-  ps2_uart_set_sda(1);
-  k_sleep(K_MSEC(100));
-
-  LOG_INF("Setting low");
-  ps2_uart_set_scl(0);
-  ps2_uart_set_sda(0);
-  k_sleep(K_MSEC(100));
-
-  LOG_INF("Setting high");
-  ps2_uart_set_scl(1);
-  ps2_uart_set_sda(1);
-  k_sleep(K_MSEC(100));
-
-  LOG_INF("Setting low");
-  ps2_uart_set_scl(0);
-  ps2_uart_set_sda(0);
-  k_sleep(K_MSEC(100));
-
-  LOG_INF("Setting high");
-  ps2_uart_set_scl(1);
-  ps2_uart_set_sda(1);
-  k_sleep(K_MSEC(100));
-
-  LOG_INF("Setting low");
-  ps2_uart_set_scl(0);
-  ps2_uart_set_sda(0);
-  k_sleep(K_MSEC(100));
-
-  LOG_WRN("Enabling interrupt callback");
-  ps2_uart_set_scl_callback_enabled(true);
-
-  LOG_WRN("Setting SCL input");
-  ps2_uart_configure_pin_scl_input();
-
-  k_sleep(K_MSEC(300));
-
-  LOG_WRN("Switching back to mode read");
-  err = ps2_uart_set_mode_read();
-  if (err != 0) {
-    LOG_ERR("Could not configure driver for write mode: %d", err);
-    return err;
-  }
-
-  LOG_WRN("Finished Debug write");
-
-  return -1;
-}
 
 int ps2_uart_write_byte(uint8_t byte) {
   int err;
@@ -972,8 +909,6 @@ int ps2_uart_write_byte_start(uint8_t byte) {
   k_work_schedule_for_queue(&ps2_uart_work_queue, &data->write_scl_timout,
                             PS2_UART_TIMEOUT_WRITE_SCL_START);
 
-  k_mutex_unlock(&ps2_uart_write_mutex);
-
   return 0;
 }
 
@@ -1139,7 +1074,12 @@ void ps2_uart_write_finish(bool successful, char *descr) {
   // Give the semaphore to allow write_byte_blocking to continue
   k_sem_give(&data->write_lock);
 
-  k_mutex_unlock(&ps2_uart_write_mutex);
+  // NOTE: the ps2_uart_write_mutex is intentionally NOT released here or in
+  // ps2_uart_write_byte_start(). It is held by ps2_uart_write_byte() for the
+  // whole transmission and released exactly once at its end. The old code
+  // unlocked it three times (write_byte end, write_byte_start, write_finish),
+  // which corrupted the mutex state and let a second thread write concurrently
+  // (review 2026-08-13 item 1.2).
 }
 
 /*
@@ -1227,6 +1167,10 @@ static int ps2_uart_enable_callback(const struct device *dev) {
   struct ps2_uart_data *data = dev->data;
   data->callback_enabled = true;
 
+  // Drop stale bytes that arrived while the callback was disabled so the
+  // first enabled frame starts clean.
+  k_msgq_purge(&data->callback_queue);
+
   // LOG_DBG("Enabled PS2 callback.");
 
   ps2_uart_data_queue_empty();
@@ -1275,6 +1219,10 @@ static int ps2_uart_init(const struct device *dev) {
   k_msgq_init(&data->data_queue, data->data_queue_buffer,
               sizeof(struct ps2_uart_data_queue_item),
               PS2_UART_DATA_QUEUE_SIZE);
+
+  // Init FIFO for bytes handed to the PS/2 callback
+  k_msgq_init(&data->callback_queue, data->callback_queue_buffer,
+              sizeof(uint8_t), PS2_UART_CALLBACK_QUEUE_SIZE);
 
   // Custom queue for background PS/2 processing work at high priority
   k_work_queue_start(&ps2_uart_work_queue, ps2_uart_work_queue_stack_area,
