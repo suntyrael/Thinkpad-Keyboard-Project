@@ -332,7 +332,13 @@ int ps2_gpio_configure_pin_scl_input() {
 }
 
 int ps2_gpio_configure_pin_scl_output() {
-  return ps2_gpio_configure_pin_scl((GPIO_OUTPUT_HIGH), "output");
+  // Open-drain: PS/2 spec forbids the host from driving CLK high (host may
+  // only pull low or release). Push-pull high fought the device's open-drain
+  // low, so the TrackPoint never started the write clock (0xe1/0xf4 scl
+  // timeout at pos=1). Release state is pulled high by the external/onboard
+  // pull-up resistor.
+  return ps2_gpio_configure_pin_scl((GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN),
+                                    "output");
 }
 
 int ps2_gpio_configure_pin_sda(gpio_flags_t flags, char *descr) {
@@ -352,7 +358,11 @@ int ps2_gpio_configure_pin_sda_input() {
 }
 
 int ps2_gpio_configure_pin_sda_output() {
-  return ps2_gpio_configure_pin_sda((GPIO_OUTPUT_HIGH), "output");
+  // Open-drain, same rationale as SCL: data bit 1 = release (pulled high by
+  // the pull-up), data bit 0 = drive low. Device ACK (pull-low) never fights
+  // a push-pull high.
+  return ps2_gpio_configure_pin_sda((GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN),
+                                    "output");
 }
 
 bool ps2_gpio_get_byte_parity(uint8_t byte) {
