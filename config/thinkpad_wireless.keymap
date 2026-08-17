@@ -33,7 +33,12 @@
             #binding-cells = <2>;
             flavor = "hold-preferred";
             tapping-term-ms = <2000>;
-            bindings = <&none>, <&bt BT_SEL 0>;
+            /* hold-tap `bindings` is type: phandles (no cells allowed); the
+             * parameter comes from the keymap usage instead: the first usage
+             * cell is forwarded to the HOLD binding's param1 (BT_SEL command)
+             * and the second to the TAP binding's param1 (unused 0). &bt's
+             * param2 (profile index) stays 0, i.e. profile 0 is selected. */
+            bindings = <&bt>, <&none>;
         };
     };
 
@@ -75,7 +80,7 @@
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                &trans     &ht_bt_pair 0 0 /* Row 8: HOTKEY(mo 1)/ThinkVantage,
+                &trans     &ht_bt_pair BT_SEL 0 /* Row 8: HOTKEY(mo 1)/ThinkVantage,
                                               PWRSWITCH: hold >= 2 s -> BT_SEL 0
                                               (pair/advertise), short tap = none
                                               (2026-08-17) */

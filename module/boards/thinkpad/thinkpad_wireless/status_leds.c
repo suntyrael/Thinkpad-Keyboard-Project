@@ -77,10 +77,10 @@ static volatile int64_t pwr_key_press_time = 0;
  * (review 2026-08-13 item 3.2). */
 #define BOOT_DISPLAY_TICKS 10
 
-  K_THREAD_STACK_DEFINE(led_stack, LED_THREAD_STACK_SIZE);
-  static struct k_thread led_thread_data;
+K_THREAD_STACK_DEFINE(led_stack, LED_THREAD_STACK_SIZE);
+static struct k_thread led_thread_data;
 
-  static void led_thread_fn(void *a, void *b, void *c) {
+static void led_thread_fn(void *a, void *b, void *c) {
   int toggle = 0;
   int blink_on = 0;
   int tick_count = 0;
