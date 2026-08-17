@@ -32,6 +32,7 @@
 #include <zmk/events/activity_state_changed.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/ble_active_profile_changed.h>
+#include <zmk/events/position_state_changed.h>
 
 #include "board_hw.h"
 
@@ -231,9 +232,46 @@ static void led_thread_fn(void *a, void *b, void *c) {
 }
 
 /* --------------------------------------------------------------------------
+ * Mute / mic-mute LEDs (local toggle)
+ *
+ * The standard HID LED report only carries Num / Caps / Scroll / Compose /
+ * Kana - there is no mute bit - so the host-side mute state can never be
+ * read back by the keyboard. We toggle the LED on key press instead.
+ * Limitation: host-initiated mute changes (e.g. via the OS mixer) are not
+ * reflected. Caps lock LED is NOT handled here: it uses the
+ * zmk,indicator-leds host-report path and is driven by that driver.
+ * Implemented 2026-08-17 per bring-up testing (positions 98/99 =
+ * speaker-mute / mic-mute in the keymap).
+ * -------------------------------------------------------------------------- */
+static int mute_leds_position_listener(const zmk_event_t *eh) {
+  const struct zmk_position_state_changed *ev =
+      as_zmk_position_state_changed(eh);
+  if (ev == NULL || !ev->state) {
+    return ZMK_EV_EVENT_BUBBLE;
+  }
+
+  switch (ev->position) {
+  case 98: /* speaker mute key (C_MUTE) -> -LED_MUTE */
+    gpio_pin_toggle(gpio1_dev, MUTE_LED_PIN);
+    break;
+  case 99: /* mic-mute key (C_MUTE placeholder, no C_MIC_MUTE in ZMK)
+              -> -LEDMICMUTE_R */
+    gpio_pin_toggle(gpio1_dev, MIC_MUTE_LED_PIN);
+    break;
+  default:
+    break;
+  }
+
+  return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(status_leds_mute, mute_leds_position_listener);
+ZMK_SUBSCRIPTION(status_leds_mute, zmk_position_state_changed);
+
+/* --------------------------------------------------------------------------
  * ZMK Event Listeners
  *
- * These run in ZMK's event manager context — it is safe to call all ZMK APIs
+ * These run in ZMK's event manager context - it is safe to call all ZMK APIs
  * here.  We just update the shared state flags and let the LED thread act on
  * them asynchronously.
  * -------------------------------------------------------------------------- */
@@ -280,6 +318,12 @@ static int status_leds_init(void) {
 
   /* Configure PWRSWITCH (P1.11) as input pull-up for safety */
   gpio_pin_configure(gpio1_dev, PWRSWITCH_PIN, GPIO_INPUT | GPIO_PULL_UP);
+
+  /* Mute / mic-mute LEDs: outputs, start OFF (active-LOW: 1 = off) */
+  gpio_pin_configure(gpio1_dev, MUTE_LED_PIN, GPIO_OUTPUT);
+  gpio_pin_set(gpio1_dev, MUTE_LED_PIN, 1);
+  gpio_pin_configure(gpio1_dev, MIC_MUTE_LED_PIN, GPIO_OUTPUT);
+  gpio_pin_set(gpio1_dev, MIC_MUTE_LED_PIN, 1);
 
   /* Seed state from current ZMK values */
   bt_connected = zmk_ble_active_profile_is_connected();
