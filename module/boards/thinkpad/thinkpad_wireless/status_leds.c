@@ -33,6 +33,7 @@
 #include <zmk/events/activity_state_changed.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/ble_active_profile_changed.h>
+#include <zmk/events/layer_state_changed.h>
 #include <zmk/events/position_state_changed.h>
 
 #include "board_hw.h"
@@ -60,6 +61,13 @@ static volatile bool bt_connected = false;
 static volatile uint8_t battery_soc = 100; /* 0-100 %, default optimistic */
 static volatile bool is_idle = false;
 
+/* Pairing blink state (2026-08-17): Power key is held while BT layer 1 is
+ * active for >= 2 s - mirrors the ht_bt_pair hold-tap in the keymap, so the
+ * power LED blinks fast instead of breathing while pairing. */
+static volatile bool layer1_active = false;
+static volatile bool pwr_key_held = false;
+static volatile int64_t pwr_key_press_time = 0;
+
 /* --------------------------------------------------------------------------
  * LED worker thread
  * -------------------------------------------------------------------------- */
@@ -69,11 +77,12 @@ static volatile bool is_idle = false;
  * (review 2026-08-13 item 3.2). */
 #define BOOT_DISPLAY_TICKS 10
 
-K_THREAD_STACK_DEFINE(led_stack, LED_THREAD_STACK_SIZE);
-static struct k_thread led_thread_data;
+  K_THREAD_STACK_DEFINE(led_stack, LED_THREAD_STACK_SIZE);
+  static struct k_thread led_thread_data;
 
-static void led_thread_fn(void *a, void *b, void *c) {
+  static void led_thread_fn(void *a, void *b, void *c) {
   int toggle = 0;
+  int blink_on = 0;
   int tick_count = 0;
   int breath_step = 0;
   int pwr_press_ticks = 0;
@@ -170,13 +179,23 @@ static void led_thread_fn(void *a, void *b, void *c) {
       sys_poweroff();
     }
 
-    /* ---- Power LED PWM Breathing ---- */
+    /* ---- Power LED: normal breathing, fast blink during pairing ---- */
     if (pwm_is_ready_dt(&pwm_led)) {
       uint32_t period = pwm_led.period;
-      uint32_t pulse = (period * breath_table[breath_step]) / 100;
-      pwm_set_pulse_dt(&pwm_led, pulse);
+      /* ThinkVantage/Fn + Power held >= 2 s = pairing (mirrors the
+       * ht_bt_pair behavior in the keymap) -> ~12.5 Hz blink. */
+      const bool pairing = layer1_active && pwr_key_held &&
+                           (k_uptime_get() - pwr_key_press_time >= 2000);
+      if (pairing) {
+        blink_on = !blink_on;
+        pwm_set_pulse_dt(&pwm_led, blink_on ? period : 0);
+        breath_step = 0; /* freeze the breathing phase while pairing */
+      } else {
+        uint32_t pulse = (period * breath_table[breath_step]) / 100;
+        pwm_set_pulse_dt(&pwm_led, pulse);
+        breath_step = (breath_step + 1) % 50;
+      }
     }
-    breath_step = (breath_step + 1) % 50;
 
     /* ---- Status LEDs (BT & Battery) updated every 6 ticks (~480ms) ---- */
     if (tick_count % 6 == 0) {
@@ -268,6 +287,37 @@ static int mute_leds_position_listener(const zmk_event_t *eh) {
 
 ZMK_LISTENER(status_leds_mute, mute_leds_position_listener);
 ZMK_SUBSCRIPTION(status_leds_mute, zmk_position_state_changed);
+
+/* Power key position tracking for the pairing blink (pos 129 = PWRSWITCH) */
+static int power_key_position_listener(const zmk_event_t *eh) {
+  const struct zmk_position_state_changed *ev =
+      as_zmk_position_state_changed(eh);
+  if (ev == NULL || ev->position != 129) {
+    return ZMK_EV_EVENT_BUBBLE;
+  }
+
+  pwr_key_held = ev->state;
+  if (ev->state) {
+    pwr_key_press_time = k_uptime_get();
+  }
+  return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(status_leds_pwr, power_key_position_listener);
+ZMK_SUBSCRIPTION(status_leds_pwr, zmk_position_state_changed);
+
+/* BT layer (layer 1) activation state - active while ThinkVantage or FN is
+ * held (both are bound to mo 1). */
+static int layer_state_listener(const zmk_event_t *eh) {
+  const struct zmk_layer_state_changed *ev = as_zmk_layer_state_changed(eh);
+  if (ev != NULL && ev->layer == 1) {
+    layer1_active = ev->state;
+  }
+  return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(status_leds_layer, layer_state_listener);
+ZMK_SUBSCRIPTION(status_leds_layer, zmk_layer_state_changed);
 
 /* --------------------------------------------------------------------------
  * ZMK Event Listeners
