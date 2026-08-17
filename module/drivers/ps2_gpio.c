@@ -20,6 +20,24 @@
 #define LOG_LEVEL CONFIG_PS2_LOG_LEVEL
 LOG_MODULE_REGISTER(ps2_gpio);
 
+#if defined(CONFIG_SOC_SERIES_NRF52X)
+
+// Debug self-check (only when the edge-level interrupt log is enabled): read
+// back the nRF PIN_CNF register of the PS/2 pins and log the DRIVE field.
+// DRIVE decoding (bits 9:8): 0=S0S1, 1=H0S1, 2=S0D1, 3=H0D1 (high-drive
+// open-drain). We expect 3 for the CLK/DATA output configuration, proving
+// the high-drive open-drain config really reached the hardware register.
+static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec, int port_num,
+                                   const char *label) {
+  uintptr_t base = (port_num == 0) ? 0x50000000UL : 0x50000300UL; // GPIO0/GPIO1
+  uint32_t pincnf = *(volatile uint32_t *)(base + 0x700 + 4UL * (uint32_t)spec->pin);
+  uint32_t drive = (pincnf >> 8) & 0x3U;
+  LOG_INF("PS/2 pin %s (P%d.%02d) PIN_CNF=0x%08x DRIVE=%u (0=S0S1 1=H0S1 2=S0D1 3=H0D1)",
+          label, port_num, spec->pin, pincnf, drive);
+}
+
+#endif /* CONFIG_SOC_SERIES_NRF52X */
+
 /*
  * Settings
  */
@@ -1076,6 +1094,18 @@ int ps2_gpio_write_byte_start(uint8_t byte) {
   ps2_gpio_set_scl_callback_enabled(false);
   ps2_gpio_configure_pin_scl_output();
   ps2_gpio_configure_pin_sda_output();
+
+#if IS_ENABLED(CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED) && defined(CONFIG_SOC_SERIES_NRF52X)
+  // Self-check (once): read back the output-drive register value right after
+  // the pins were configured as outputs, to prove high-drive open-drain
+  // (H0D1 = DRIVE field 3) really reached the hardware.
+  static bool ps2_gpio_drive_checked;
+  if (!ps2_gpio_drive_checked) {
+    ps2_gpio_drive_checked = true;
+    ps2_gpio_log_pin_drive(&data->scl_gpio, ps2_gpio_config.scl_gpio_port_num, "SCL");
+    ps2_gpio_log_pin_drive(&data->sda_gpio, ps2_gpio_config.sda_gpio_port_num, "SDA");
+  }
+#endif
 
   LOG_PS2_INT("Starting write of byte ", &byte);
 
