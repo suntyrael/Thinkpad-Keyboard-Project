@@ -27,6 +27,14 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 // Delay mouse init to give the mouse time to send the init sequence.
 #define ZMK_MOUSE_PS2_INIT_THREAD_DELAY_MS 1000
 
+// Quiet period after the device has sent its POR self-test result (0xaa)
+// before the host starts sending commands. The IBM TP4 spec says activity on
+// the clock/data lines is ignored until the diagnostic sequence completes;
+// some modules also need a short settle time before they accept the first
+// host write (observed as "scl timeout at pos=1" when commands were sent
+// immediately after reading 0xaa/device-id).
+#define ZMK_MOUSE_PS2_INIT_POST_POR_SETTLE_MS 250
+
 // How often the driver try to initialize a mouse before we give up.
 #define MOUSE_PS2_INIT_ATTEMPTS 10
 
@@ -1701,6 +1709,13 @@ static void zmk_mouse_ps2_init_thread(const struct device *dev, int unused) {
             MOUSE_PS2_INIT_ATTEMPTS);
     return;
   }
+
+  // Let the device finish its POR diagnostics and settle before the first
+  // host write (0xF2/0xE1); writing too early returns a hard "scl timeout at
+  // pos=1" from devices that ignore bus activity mid-diagnostic.
+  LOG_DBG("Waiting %d ms for device to settle after POR...",
+          ZMK_MOUSE_PS2_INIT_POST_POR_SETTLE_MS);
+  k_sleep(K_MSEC(ZMK_MOUSE_PS2_INIT_POST_POR_SETTLE_MS));
 
   if (config->sampling_rate != MOUSE_PS2_CMD_SET_SAMPLING_RATE_DEFAULT) {
 
