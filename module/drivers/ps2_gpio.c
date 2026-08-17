@@ -250,6 +250,12 @@ struct ps2_gpio_data {
   uint8_t write_awaits_resp_byte;
   struct k_sem write_awaits_resp_sem;
 
+  // Set when the write handler reaches the ACK position: the SCL interrupt
+  // is switched to the RISING edge and the next edge samples the device's
+  // ACK (device holds DATA low through the whole ack bit, so sampling at
+  // its rising edge is stable - see ps2_gpio_write_interrupt_handler).
+  bool ack_rising_pending;
+
   struct k_work resend_cmd_work;
 };
 
@@ -281,6 +287,7 @@ static struct ps2_gpio_data ps2_gpio_data = {
 
     .write_awaits_resp = false,
     .write_awaits_resp_byte = 0x0,
+    .ack_rising_pending = false,
 };
 
 K_THREAD_STACK_DEFINE(ps2_gpio_work_queue_stack_area,
@@ -332,13 +339,27 @@ void ps2_gpio_set_sda(int state) {
   gpio_pin_set_dt(&data->sda_gpio, state);
 }
 
+int ps2_gpio_set_scl_callback(bool enabled, bool rising_edge);
+
 int ps2_gpio_set_scl_callback_enabled(bool enabled) {
+  return ps2_gpio_set_scl_callback(enabled, true);
+}
+
+// PS/2 timing: the device changes DATA on the FALLING edge of CLK, so the
+// host must sample it on the RISING edge (data is stable through the high
+// phase). Reads therefore trigger on the RISING edge; writes keep the
+// FALLING edge (the host must set the next bit as early as possible, before
+// the device samples it at the rising edge).
+int ps2_gpio_set_scl_callback(bool enabled, bool rising_edge) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
   int err;
 
+  gpio_flags_t edge = rising_edge
+                          ? (gpio_flags_t)GPIO_INT_EDGE_RISING
+                          : (gpio_flags_t)GPIO_INT_EDGE_FALLING;
+
   if (enabled) {
-    err = gpio_pin_interrupt_configure_dt(&data->scl_gpio,
-                                          (GPIO_INT_EDGE_FALLING));
+    err = gpio_pin_interrupt_configure_dt(&data->scl_gpio, edge);
     if (err) {
       LOG_ERR("failed to enable interrupt on "
               "SCL GPIO pin (err %d)",
@@ -590,7 +611,7 @@ void ps2_gpio_interrupt_log_print_worker(struct k_work *item) {
             "(mode=%s, pos=%s, scl=%d, sda=%d)",
             interrupt_log_offset + i + 1, l->uptime_ticks, l->msg,
             ps2_gpio_interrupt_log_get_mode_str(), pos_str, l->scl, l->sda);
-    k_sleep(K_MSEC(15));
+    k_sleep(K_MSEC(2));
   }
   LOG_INF("======== End Log ========");
 
@@ -1130,8 +1151,10 @@ void ps2_gpio_write_inhibition_wait(struct k_work *item) {
   struct ps2_gpio_data *data =
       CONTAINER_OF(d_work, struct ps2_gpio_data, write_inhibition_wait);
 
-  // Enable the scl interrupt again
-  ps2_gpio_set_scl_callback_enabled(true);
+  // Enable the scl interrupt again - FALLING edge for write mode (the host
+  // sets the next data bit on each falling edge; the device samples it on
+  // the following rising edge).
+  ps2_gpio_set_scl_callback(true, false);
 
   // Set data to value of start bit
   ps2_gpio_set_sda(0);
@@ -1167,6 +1190,26 @@ void ps2_gpio_write_interrupt_handler() {
   // each falling edge.
   struct ps2_gpio_data *data = &ps2_gpio_data;
 
+  // ACK sample: the interrupt was switched to the RISING edge at the ACK
+  // position; this edge is the end of the ack bit, when DATA is still held
+  // low by the device. Sample and finish the write.
+  if (data->ack_rising_pending) {
+    data->ack_rising_pending = false;
+    int ack_val = ps2_gpio_get_sda();
+
+    LOG_PS2_INT("Write interrupt", NULL);
+
+    if (ack_val == 0) {
+      LOG_PS2_INT("Write was successful on ack: ", NULL);
+      ps2_gpio_write_finish(true, "valid ack bit");
+    } else {
+      LOG_PS2_INT("Write failed on ack", NULL);
+      ps2_gpio_write_finish(false, "invalid ack bit");
+    }
+
+    return;
+  }
+
   if (data->cur_write_pos == PS2_GPIO_POS_START) {
     // This should not be happening, because the PS2_GPIO_POS_START bit
     // is sent in ps2_gpio_write_byte_start during inhibition
@@ -1192,29 +1235,19 @@ void ps2_gpio_write_interrupt_handler() {
     // so that we can receive the ack bit from the device
     ps2_gpio_configure_pin_sda_input();
   } else if (data->cur_write_pos == PS2_GPIO_POS_ACK) {
-    // The device asserts DATA low only briefly around the ack clock (its
-    // low window measured at ~50us - right at the edge of a single fixed
-    // delay, which made ACK success a coin flip). Poll the line in a tight
-    // loop instead: the first 0 sampled within the window wins; if the line
-    // stays high through the whole window the device did not ACK.
-    int ack_val = 1;
-    for (int i = 0; i < 12; i++) {
-      k_busy_wait(5);
-      ack_val = ps2_gpio_get_sda();
-      if (ack_val == 0) {
-        break;
-      }
-    }
+    // ACK: the device pulls DATA low and holds it through the whole ack
+    // bit. Switch the SCL interrupt to the RISING edge and sample DATA
+    // there - the line is stable at that point (a fixed delay / polling
+    // loop after the falling edge sits at the boundary of the device's
+    // brief DATA-low window and was a coin flip).
+    ps2_gpio_set_scl_callback(true, true);
+    data->ack_rising_pending = true;
+
+    // Guard against the rising edge never arriving: abort the write.
+    k_work_schedule_for_queue(&ps2_gpio_work_queue, &data->write_scl_timout,
+                              PS2_GPIO_TIMEOUT_WRITE_SCL);
 
     LOG_PS2_INT("Write interrupt", NULL);
-
-    if (ack_val == 0) {
-      LOG_PS2_INT("Write was successful on ack: ", NULL);
-      ps2_gpio_write_finish(true, "valid ack bit");
-    } else {
-      LOG_PS2_INT("Write failed on ack", NULL);
-      ps2_gpio_write_finish(false, "invalid ack bit");
-    }
 
     return;
   } else {
@@ -1269,10 +1302,17 @@ void ps2_gpio_write_finish(bool successful, char *descr) {
   data->cur_read_pos = PS2_GPIO_POS_START;
   data->cur_write_pos = PS2_GPIO_POS_START;
   data->cur_write_byte = 0x0;
+  data->ack_rising_pending = false;
 
   // Give back control over data and clock line if we still hold on to it
   ps2_gpio_configure_pin_sda_input();
   ps2_gpio_configure_pin_scl_input();
+
+  // Back to read mode: sample on the RISING edge again. Make sure the scl
+  // callback is enabled - it's possible that all threads are busy,
+  // write_inhibition_wait doesn't get called in time and the semaphore
+  // times out; in that case we want the interrupt callback enabled again.
+  ps2_gpio_set_scl_callback(true, true);
 
   // Give the semaphore to allow write_byte_blocking to continue
   k_sem_give(&data->write_lock);
