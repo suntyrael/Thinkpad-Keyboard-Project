@@ -23,6 +23,20 @@
         };
     };
 
+    behaviors {
+        /* ThinkVantage + Power: hold >= 2 s triggers BT_SEL 0 (pairing /
+         * advertise); a short tap does nothing (no accidental pairing).
+         * Mirrored by the 2 s pairing logic in status_leds.c that blinks
+         * the power LED (2026-08-17). */
+        ht_bt_pair: ht_bt_pair {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            flavor = "hold-preferred";
+            tapping-term-ms = <2000>;
+            bindings = <&none>, <&bt BT_SEL 0>;
+        };
+    };
+
     keymap {
         compatible = "zmk,keymap";
 
@@ -36,11 +50,11 @@
                 &kp CAPS   &kp A      &kp S      &kp D      &kp F      &kp G      &kp H      &kp J      &kp K      &kp L      &kp SEMI   &kp SQT    &kp RET    &trans     &trans     &trans
                 &kp LSHFT  &kp Z      &kp X      &kp C      &kp V      &kp B      &kp N      &kp M      &kp COMMA  &kp DOT    &kp FSLH   &kp RSHFT  &kp UP     &trans     &trans     &trans
                 &kp LCTRL  &kp LWIN   &kp LALT   &trans     &trans     &kp SPACE  &trans     &trans     &kp RALT   &kp RCTRL  &kp LEFT   &kp DOWN   &kp RIGHT  &trans     &trans     &trans
-                &kp C_VOL_UP &kp C_VOL_DN &kp C_MUTE &kp C_MIC_MUTE &kp F13 &kp PG_UP &kp PG_DN  &kp C_AC_BACK &kp C_AC_FORWARD &kp PSCRN &kp SLCK &kp PAUSE_BREAK &trans &trans &trans &trans
-                /* pos 99 = mic-mute (matrix (6,10)): C_MIC_MUTE = Consumer
-                 * 0xE9 so Windows 11 distinguishes it from speaker mute;
-                 * LED toggles locally in status_leds.c (review 3.4 +
-                 * bring-up 2026-08-17). */
+                &kp C_VOL_UP &kp C_VOL_DN &kp C_MUTE &kp C_MIC_MUTE &mo 1 &kp PG_UP &kp PG_DN  &kp C_AC_BACK &kp C_AC_FORWARD &kp PSCRN &kp SLCK &kp PAUSE_BREAK &trans &trans &trans &trans
+                /* pos 100 = ThinkVantage key (matrix (5,10)): now activates
+                 * the BT layer (mo 1) so ThinkVantage+1..5 switch BT devices
+                 * and ThinkVantage+Power (2 s) pairs (2026-08-17); it no
+                 * longer sends F13. */
                 /* Row 7: pos 112 = Insert (matrix (0,9), bring-up verified
                  * 2026-08-17); remaining row-7 positions are unused. */
                 &kp INS    &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
@@ -61,10 +75,10 @@
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                &trans     &bt BT_SEL 0 /* Row 8: HOTKEY(mo 1), PWRSWITCH:
-                                           select profile 0 & advertise if
-                                           unpaired (never erases a bond,
-                                           review 2.17) */
+                &trans     &ht_bt_pair 0 0 /* Row 8: HOTKEY(mo 1)/ThinkVantage,
+                                              PWRSWITCH: hold >= 2 s -> BT_SEL 0
+                                              (pair/advertise), short tap = none
+                                              (2026-08-17) */
             >;
         };
     };
