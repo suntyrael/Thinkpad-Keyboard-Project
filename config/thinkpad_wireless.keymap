@@ -7,9 +7,17 @@
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/bt.h>
 
-/* Windows 11 mic-mute uses HID Consumer usage 0xE9 (speaker mute is
- * 0xE2). ZMK has no C_MIC_MUTE keycode, so define it locally. */
-#define C_MIC_MUTE (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0xE9))
+/* Mic-mute key: HID Consumer usage 0xE9 is AC Volume Increment (Volume Up),
+ * NOT mic mute - c709cec's assumption was wrong and the key produced
+ * Volume Up on Windows. The spec-correct code is Generic Desktop page
+ * 0xA9 (System Microphone Mute), but ZMK cannot emit GD page usages
+ * (zmk_hid_press accepts KEY/CONSUMER only; upstream #1535) and Windows 11
+ * has no built-in handling for 0xA9 anyway (Microsoft Learn HUTRR110 Q&A).
+ * Consumer 0xD5 "Start or Stop Microphone Capture" is the semantic consumer
+ * code and is ZMK-sendable; Windows currently ignores it (no misfire).
+ * Teams/Zoom users can bind an app-shortcut macro instead (Ctrl+Shift+M /
+ * Alt+A). */
+#define C_MIC_MUTE (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0xD5))
 
 / {
     combos {
@@ -82,8 +90,12 @@
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &ht_bt_pair BT_SEL 0 /* Row 8: HOTKEY(mo 1)/ThinkVantage,
                                               PWRSWITCH: hold >= 2 s -> BT_SEL 0
-                                              (pair/advertise), short tap = none
-                                              (2026-08-17) */
+                                              (pair/advertise), short tap = none.
+                                              NOTE: press ThinkVantage/Fn FIRST
+                                              (layer 1 up), THEN Power >= 2 s;
+                                              ZMK binds at press time, so pressing
+                                              Power before the layer is up never
+                                              reaches ht_bt_pair (2026-08-17) */
             >;
         };
     };

@@ -182,9 +182,11 @@ static void led_thread_fn(void *a, void *b, void *c) {
     /* ---- Power LED: normal breathing, fast blink during pairing ---- */
     if (pwm_is_ready_dt(&pwm_led)) {
       uint32_t period = pwm_led.period;
-      /* ThinkVantage/Fn + Power held >= 2 s = pairing (mirrors the
-       * ht_bt_pair behavior in the keymap) -> ~12.5 Hz blink. */
-      const bool pairing = layer1_active && pwr_key_held &&
+      /* ThinkVantage/Fn + Power held >= 2 s = pairing. The 2 s window
+       * only starts from a Power press made while BT layer 1 is active
+       * (mirrors ht_bt_pair: ZMK resolves the binding at press time, so a
+       * press on layer 0 never reaches the hold-tap) -> ~12.5 Hz blink. */
+      const bool pairing = layer1_active && pwr_key_held && pwr_key_press_time != 0 &&
                            (k_uptime_get() - pwr_key_press_time >= 2000);
       if (pairing) {
         blink_on = !blink_on;
@@ -298,7 +300,13 @@ static int power_key_position_listener(const zmk_event_t *eh) {
 
   pwr_key_held = ev->state;
   if (ev->state) {
-    pwr_key_press_time = k_uptime_get();
+    /* Pairing only starts when Power is pressed while the BT layer is
+     * already active: ZMK resolves the key binding at press time, so a
+     * press made on layer 0 (&none) never reaches ht_bt_pair even if the
+     * layer is activated while the key is still held (2026-08-17). */
+    pwr_key_press_time = layer1_active ? k_uptime_get() : 0;
+  } else {
+    pwr_key_press_time = 0; /* window closed */
   }
   return ZMK_EV_EVENT_BUBBLE;
 }
@@ -312,6 +320,11 @@ static int layer_state_listener(const zmk_event_t *eh) {
   const struct zmk_layer_state_changed *ev = as_zmk_layer_state_changed(eh);
   if (ev != NULL && ev->layer == 1) {
     layer1_active = ev->state;
+    if (!ev->state && pwr_key_held) {
+      /* Layer dropped while Power still held: the ht_bt_pair press window
+       * is gone (binding reverted to &none) - invalidate the timer. */
+      pwr_key_press_time = 0;
+    }
   }
   return ZMK_EV_EVENT_BUBBLE;
 }
