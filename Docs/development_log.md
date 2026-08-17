@@ -442,4 +442,13 @@
 3. **修复方案（36c5c88）**：
    - keymap：`C_MIC_MUTE` 由 Consumer 0xE9 改为 **Consumer 0xD5（Start or Stop Microphone Capture）**——语义正确的消费类码、ZMK 可发送、不再误触音量+；注释记录完整溯源（0xE9=音量+ / GD 0xA9 规范正确但 ZMK 发不了且 Windows 不认 / 0xD5 为可行折衷，Teams 可另配 Ctrl+Shift+M 宏）。Row 8 注释明确手势顺序：**先按 ThinkVantage/Fn 激活层 1，再按 Power ≥2s**。
    - `status_leds.c`：配对 2s 计时仅在 **Power 于层 1 激活状态按下时**开始（`pwr_key_press_time = layer1_active ? now : 0`），松开或层 1 关闭即失效（=0 哨兵，配对判定额外要求 `pwr_key_press_time != 0`），精确镜像 ht_bt_pair 的绑定窗口，杜绝"层外按下→假配对闪烁"。
-4. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 321384 B（39.63%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出。实机操作顺序应为：按住 ThinkVantage（或 Fn）→ 再按住 Power ≥2s → 电源灯快闪进入配对。
+4. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 321384 B（39.63%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出。实机操作顺序应为：按住 ThinkVantage（或 Fn）→ 再按住 Power ≥2s → 电源灯快闪进入配对。4. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 321384 B（39.63%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出。实机操作顺序应为：按住 ThinkVantage（或 Fn）→ 再按住 Power ≥2s → 电源灯快闪进入配对。
+
+### [2026-08-17] v1.0.44 — VBUS 检测改事件驱动（删除轮询）；压低 PS/2 点击级日志
+1. **背景**：上电日志持续刷 `zmk_usb_get_conn_state: state: 3`（每 ~80ms 一条）——`status_leds.c` 低电量关机与充电指示灯在 LED 线程**每个 tick** 调用 `zmk_usb_is_powered()`，而该调用在未打补丁的 ZMK 中每次执行 `LOG_DBG`。先按降频思路处理（1s、2min 轮询），随后复核硬件链路发现问题根源：**VBUS 检测本应是中断事件，无需轮询**。
+2. **硬件实证（zephyr usb_dc_nrfx.c）**：nRF52840 POWER 外设自带 USB 检测中断——`usb_dc_power_event_handler()` 处理 `NRFX_POWER_USB_EVT_DETECTED/READY/REMOVED`（VBUS 上电/稳定/移除），映射到 `USB_DC_CONNECTED/DISCONNECTED` 状态回调；ZMK `usb.c` 在状态变化时 raise `zmk_usb_conn_state_changed` 事件。插充电器（不枚举）同样触发（POWERED 状态独立于枚举流程），拔线触发 REMOVED。**不存在"必须轮询"的硬件场景**。
+3. **修复方案（619edee）**：
+   - `status_leds.c`：删除 VBUS 轮询（含 80ms→1s→2min 的各级节流），改为订阅 `zmk_usb_conn_state_changed` 事件更新 `vbus_present`（`conn_state != ZMK_USB_CONN_NONE`），LED 线程仅在启动时读一次初值。充电指示灯/低电量关机判定零轮询、插拔即时响应，附带消除刷屏（不改 ZMK 日志级别也能彻底安静）。
+   - 顺带压低两处"每次操作必打"的 INFO 日志：`input_mouse_ps2.c` 指点杆六路按键日志（按下/释放 × 左中右）降为 DBG；`ps2_uart.c` 写中断处理中每 SCL bit 一条的 `Inside ps2_uart_write_scl_interrupt_handler_blocking` 降为 DBG（当前用 gpio 模式未触发，属隐患）。
+   - 保留说明：`CONFIG_ZMK_BATTERY_REPORT_INTERVAL=10`（电量采样 10s）不随本次改动——低电量关机（<2% SoC 且无 VBUS）的响应依赖它及时更新，采样间隔拉太长会滞后关机保护（v1.0.35）。
+4. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 321700 B（39.67%）、RAM 87098 B（33.23%）。上电后不再出现 80ms 刷屏；插拔 USB（含纯充电口）由中断事件即时更新充电指示灯。
