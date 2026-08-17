@@ -430,4 +430,16 @@
 1. **问题现象**：Build #93（GitHub Actions）失败于 DTS 解析阶段：`DTError: expected property 'bindings' on /behaviors/ht_bt_pair ... not 'bindings = < &none >, < &bt 0x3 0x0 >;'`，C 代码尚未开始编译。
 2. **根因分析**：v1.0.41 的 `ht_bt_pair` 在 `bindings` 属性中写了 `<&bt BT_SEL 0>`（带 2 个 cell 参数），但 `zmk,behavior-hold-tap` 绑定的 `bindings` 是 `type: phandles`（只允许裸 phandle，不允许附加参数），gen_edt 直接报错。
 3. **修复方案（849ced0）**：`bindings` 改为裸 phandle `bindings = <&bt>, <&none>;`，参数改经键位用法单元格传递——usage `&ht_bt_pair BT_SEL 0` 中第 1 个 cell 由驱动转发为 hold 绑定的 `param1`（= `BT_SEL_CMD`），第 2 个 cell 转发为 tap 绑定 `param1`（`&none` 忽略）；`&bt` 的 `param2` 缺省为 0，即选中 profile 0。语义与 v1.0.41 意图一致（hold ≥2s → `zmk_ble_prof_select(0)` 配对/广播，短按无动作）。同提交修复 `status_leds.c` 文件级声明缩进错乱（列 0，符合 `.clang-format`）。
-4. **验证**：本地按 CI 命令复刻（`west build -b thinkpad_wireless -S "studio-rpc-usb-uart zmk-usb-logging" -- -DZMK_CONFIG=... -DZMK_EXTRA_MODULES=...`，Zephyr SDK 0.17.0）完整编译通过：FLASH 321336 B（39.62%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出；`status_leds.c` 新增监听（`zmk_layer_state_changed` / position 129）API 与固定 ZMK 版本 `6e2ef41e` 匹配。
+4. **验证**：本地按 CI 命令复刻（`west build -b thinkpad_wireless -S "studio-rpc-usb-uart zmk-usb-logging" -- -DZMK_CONFIG=... -DZMK_EXTRA_MODULES=...`，Zephyr SDK 0.17.0）完整编译通过：FLASH 321336 B（39.62%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出；`status_leds.c` 新增监听（`zmk_layer_state_changed` / position 129）API 与固定 ZMK 版本 `6e2ef41e` 匹配。4. **验证**：本地按 CI 命令复刻（`west build -b thinkpad_wireless -S "studio-rpc-usb-uart zmk-usb-logging" -- -DZMK_CONFIG=... -DZMK_EXTRA_MODULES=...`，Zephyr SDK 0.17.0）完整编译通过：FLASH 321336 B（39.62%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出；`status_leds.c` 新增监听（`zmk_layer_state_changed` / position 129）API 与固定 ZMK 版本 `6e2ef41e` 匹配。
+
+### [2026-08-17] v1.0.43 — MicMute 误触音量键修复；配对电源灯严格镜像 hold-tap 窗口
+1. **现象（实机日志）**：
+   - pos 99（MicMute）按下后日志显示 `usage_page 0x0C keycode 0xE9`，Windows 表现为**音量+**。
+   - ThinkVantage+Power 按住 ≥2s 后电源灯无快闪；日志分析确认**从未进入配对流程**。
+2. **根因分析**：
+   - **MicMute**：HID Consumer 页 0xE9 = AC Volume Increment（音量+）。v1.0.40（c709cec）假设"Windows 11 麦克风静音用 0xE9"是错误判断。规范中正确的系统级码是 **Generic Desktop 页 0xA9（System Microphone Mute）**，但 a) ZMK 的 `zmk_hid_press()` 仅接受 KEY(0x07)/CONSUMER(0x0C) 两个 usage page，GD 页用法直接返回 -EINVAL（上游 issue #1535 为开放功能请求），b) Windows 11 亦无内置处理 GD 0xA9（微软官方论坛 HUTRR110 问答：开发者 USBPcap 实测无反应，微软员工确认无内置支持）。ZMK 官方键码表无任何麦克风静音键码。
+   - **配对未触发**：日志显示每次 Power（pos 129）按下时 BT 层 1 均为关闭状态（11.455/13.979/21.724 按下前层分别于 11.203/13.954/21.713 关闭），pos 129 每次都以 `binding name: none` 解析——ZMK **在按下瞬间解析绑定**，之后层激活不会重解析已按住的键（日志实证：层激活期间 pos 129 无重发事件），因此 Power 先按、ThinkVantage 后按的组合**永远无法**到达 ht_bt_pair；且日志中 Power 最常按住仅 1.45s（< 2s），原 LED 判定（按物理按下时刻计时）也正确未亮。附带观察：pos 100（ThinkVantage）短时间内多次快速通断（14.227~15.314 间 4 次），疑似触点抖动或操作未稳。
+3. **修复方案（36c5c88）**：
+   - keymap：`C_MIC_MUTE` 由 Consumer 0xE9 改为 **Consumer 0xD5（Start or Stop Microphone Capture）**——语义正确的消费类码、ZMK 可发送、不再误触音量+；注释记录完整溯源（0xE9=音量+ / GD 0xA9 规范正确但 ZMK 发不了且 Windows 不认 / 0xD5 为可行折衷，Teams 可另配 Ctrl+Shift+M 宏）。Row 8 注释明确手势顺序：**先按 ThinkVantage/Fn 激活层 1，再按 Power ≥2s**。
+   - `status_leds.c`：配对 2s 计时仅在 **Power 于层 1 激活状态按下时**开始（`pwr_key_press_time = layer1_active ? now : 0`），松开或层 1 关闭即失效（=0 哨兵，配对判定额外要求 `pwr_key_press_time != 0`），精确镜像 ht_bt_pair 的绑定窗口，杜绝"层外按下→假配对闪烁"。
+4. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 321384 B（39.63%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出。实机操作顺序应为：按住 ThinkVantage（或 Fn）→ 再按住 Power ≥2s → 电源灯快闪进入配对。
