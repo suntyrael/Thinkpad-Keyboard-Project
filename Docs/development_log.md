@@ -396,3 +396,38 @@
    - **3.2/3.4 杂项**：`gpio-ps2.yaml` 的"I2C bus"描述改为 PS/2；`zmk,input-listener.yaml` 重命名为 `zmk,input-listener-ps2.yaml`；`zmk,input-mouse-ps2.yaml` 删除驱动未读取的误导性 `layer-toggle` 属性；`settings_log` 拼写 `tp-tp-press-to-select-threshold` 修正；`init_thread` 的 `int` 强转指针改为直接传 `const struct device *`；`BOOT_DISPLAY_TICKS` 注释 5s→4.8s；`behavior_mouse_setting.c` 多余分号；`thinkpad_wireless.conf` 增加 `CONFIG_ZMK_BATTERY_REPORT_INTERVAL=10`（需求 10 秒检测，默认 60s 会滞后低电关机）；`merge_hex.py` `app_size` 按地址跨度 `max-min+1` 计算。
 5. **矩阵驱动方式（review 1.1）**：按决策记录**保留推挽 + 中断驱动**设定，待 PCBA 实机验证；若出现 v1.0.29 记载的倒灌现象（左侧键区无响应 / 同列 ≥2 键异常），再切换 `GPIO_OPEN_DRAIN`（可配 `GPIO_PULL_UP`）。
 6. **验证**：本地 `west` + Zephyr SDK 0.17.0（Zephyr 4.1.0+zmk-fixes）对 `thinkpad_wireless` 板完整编译通过；`clang-format-15 --dry-run --Werror` 全模块源码零违规；transform map 130 项无重复坐标。
+### [2026-08-16] v1.0.36 — CoB 分支完成与 bmd340-module 同步，恢复 USB 日志串口
+1. **分支同步（0816970）**：将 `bmd340-module` 分支的工程改进整体合入 CoB（直贴芯片）分支，同时保持 CoB 硬件设计：仓库根新增 `.clang-format`（LLVM + 2 空格）、`lint.yml` 改为 `--dry-run --Werror`（移除自动回写 + auto-commit 反模式）、`build.yml` `create-full-image` 增加产物存在性检查、`west.yml` 锁定 ZMK 到固定提交 `6e2ef41e`、同步 `Docs/review-2026-08-13.md` 与开发日志（v1.0.34/35）、删除遗留 `Remain.md`。
+2. **恢复 USB 调试串口（32d7b50）**：`build.yaml` 恢复 `zmk-usb-logging` snippet。review 2026-08-13 item 2.12 曾因与 `studio-rpc-usb-uart` 共用同一 CDC ACM 口（帧交错）将其移除；2026-08-16 按调试需求恢复两者并存。若 Studio 二进制帧乱码，本地临时改为二选一。
+
+### [2026-08-16] v1.0.37 — PS/2 总线修复（上拉 + 开漏输出）、NVS 设置后端、Studio 解锁组合键
+1. **SCL/SDA 输入保留上拉（df08cf0 P1）**：PS/2 写抑制释放后时钟线失去上拉，主机写命令在 pos=1 处超时；`ps2_gpio` 输入配置恢复 `GPIO_PULL_UP`。
+2. **NVS 设置后端（df08cf0 P2）**：`thinkpad_wireless_defconfig` 开启 `CONFIG_FLASH`/`CONFIG_FLASH_MAP`/`CONFIG_NVS`/`CONFIG_SETTINGS_NVS`，`chosen` 注册 `zephyr,settings = &storage_partition`。修复蓝牙 `bt_gatt Database Hash err -2`、`Unable to store name`、配对信息不持久等问题；此前该修复仅在 bmd340-module（9baaec7）验证，本次对齐应用到 CoB 直贴芯片设计。
+3. **Studio 解锁组合键（df08cf0 P4）**：Q+P+J 组合（positions 33/42/55）绑定 `&studio_unlock`，与 bmd340 分支行为一致。
+4. **SCL/SDA 开漏输出（4ffc6e7）**：PS/2 主机侧不得主动把 CLK 拉高——推挽高电平会与器件开漏低电平"打架"，主机写永远无法开始；输出模式改 `GPIO_OPEN_DRAIN`，由外部上拉维持释放态高电平。
+
+### [2026-08-16] v1.0.38 — 日志级别与 Studio 解锁窗口调整
+1. **日志降级（40300fc）**：`CONFIG_ZMK_LOG_LEVEL_WRN=y` 抑制 `zmk_usb_get_conn_state` 每 ~80ms 刷屏；PS/2 驱动保留自有 `CONFIG_PS2_LOG_LEVEL`（module/Kconfig，INFO）供 bring-up 调试。
+2. **解锁窗口（40300fc）**：Q+P+J 解锁组合 `timeout-ms` 50 → 150 ms，放宽三角按键窗口，降低实机误触发困难。
+3. **保留 DEBUG + 本地 usb.c 补丁（491dd5b）**：调试期恢复 `CONFIG_ZMK_LOG_LEVEL_DEBUG`，改为对本地 `zmk/app/src/usb.c` 打补丁——`zmk_usb_get_conn_state()` 仅在 USB 状态变化时打印（静态缓存上次状态），保留全量日志的同时消除刷屏。注意：该补丁位于本地 vendored ZMK 工作区（`gitignore`，不随仓库 CI 生效），CI 构建仍为 DEBUG 全量日志，属调试期已知取舍。
+
+### [2026-08-17] v1.0.39 — X220 矩阵 bring-up 修正（SENSE6/7 交换、重复 transform 清理、INS/K_CMENU 键位、静音 LED 本地翻转）
+1. **SENSE6/SENSE7 行交换（68a019c）**：实机验证物理底行与 thinkpad-ec X220 表相反——Z X C V M , . Enter RShift RCtrl 实际在 SENSE7，B N / Space Down RAlt 在 SENSE6；`thinkpad_wireless.dts` 两行 `row-gpios` 对调。
+2. **重复 transform 坐标清理（68a019c）**：删除 8 个重复坐标（review 2.9 遗留），此前因 last-wins 查找劫持了 PSCRN/SLCK/LCTRL 三个键。
+3. **键位补齐（68a019c）**：绑定 INS（pos 112，matrix (0,9)，bring-up 验证）与 K_CMENU（pos 46，X220 菜单键，matrix (4,11)）。
+4. **静音 LED 本地翻转（68a019c）**：mute / mic-mute 两枚 LED 改由 `status_leds.c` 本地按键监听翻转（标准 HID LED 报表无静音位）；caps lock 保持 `zmk,indicator-leds` 主机同步。
+
+### [2026-08-17] v1.0.40 — mic-mute 键改发 HID Consumer 0xE9
+1. **现象（c709cec）**：pos 99（matrix (6,10)，板上有独立 `-LED_MUTE` / `-LEDMICMUTE_R` 信号）与扬声器静音共用 `&kp C_MUTE`，Windows 11 无法区分。
+2. **修复**：Windows 11 麦克风静音使用 HID Consumer usage 0xE9（扬声器静音为 0xE2），ZMK 无 `C_MIC_MUTE` 键码，在 keymap 本地定义 `#define C_MIC_MUTE (ZMK_HID_USAGE(HID_USAGE_CONSUMER, 0xE9))` 并绑定该键；LED 仍由 status_leds.c 本地翻转。
+
+### [2026-08-17] v1.0.41 — ThinkVantage BT 层：2 秒长按配对 + 电源灯快闪
+1. **ThinkVantage 键改层（329dc9c）**：pos 100（matrix (5,10)）由 `&kp F13` 改为 `mo 1` 激活 BT 层——ThinkVantage+1..5（bt 层第 2 行）切换 BT 设备；Fn 保留 `mo 1`。
+2. **新增 `ht_bt_pair` hold-tap（329dc9c）**：`flavor = "hold-preferred"`、`tapping-term-ms = <2000>`。ThinkVantage/Fn + Power 按住 ≥2s 触发 `BT_SEL 0`（配对/广播），短按无动作（防误配对）；bt 层 Row 8 PWRSWITCH 位置绑定该行为。
+3. **电源灯配对快闪（329dc9c）**：`status_leds.c` 新增监听——BT 层 1 激活（`zmk_layer_state_changed` layer==1）且 Power（position 129 = PWRSWITCH）按住 ≥2s 时，电源 LED 以 ~12.5Hz 快闪代替呼吸（镜像 hold-tap 时序），呼吸相位冻结，松开恢复。
+
+### [2026-08-17] v1.0.42 — 修复 Build #93 编译失败（hold-tap bindings 只能裸 phandle）
+1. **问题现象**：Build #93（GitHub Actions）失败于 DTS 解析阶段：`DTError: expected property 'bindings' on /behaviors/ht_bt_pair ... not 'bindings = < &none >, < &bt 0x3 0x0 >;'`，C 代码尚未开始编译。
+2. **根因分析**：v1.0.41 的 `ht_bt_pair` 在 `bindings` 属性中写了 `<&bt BT_SEL 0>`（带 2 个 cell 参数），但 `zmk,behavior-hold-tap` 绑定的 `bindings` 是 `type: phandles`（只允许裸 phandle，不允许附加参数），gen_edt 直接报错。
+3. **修复方案（849ced0）**：`bindings` 改为裸 phandle `bindings = <&bt>, <&none>;`，参数改经键位用法单元格传递——usage `&ht_bt_pair BT_SEL 0` 中第 1 个 cell 由驱动转发为 hold 绑定的 `param1`（= `BT_SEL_CMD`），第 2 个 cell 转发为 tap 绑定 `param1`（`&none` 忽略）；`&bt` 的 `param2` 缺省为 0，即选中 profile 0。语义与 v1.0.41 意图一致（hold ≥2s → `zmk_ble_prof_select(0)` 配对/广播，短按无动作）。同提交修复 `status_leds.c` 文件级声明缩进错乱（列 0，符合 `.clang-format`）。
+4. **验证**：本地按 CI 命令复刻（`west build -b thinkpad_wireless -S "studio-rpc-usb-uart zmk-usb-logging" -- -DZMK_CONFIG=... -DZMK_EXTRA_MODULES=...`，Zephyr SDK 0.17.0）完整编译通过：FLASH 321336 B（39.62%）、RAM 87098 B（33.23%），`zmk.hex` 正常产出；`status_leds.c` 新增监听（`zmk_layer_state_changed` / position 129）API 与固定 ZMK 版本 `6e2ef41e` 匹配。
