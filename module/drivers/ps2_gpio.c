@@ -13,12 +13,29 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#if defined(CONFIG_SOC_SERIES_NRF52X)
+#include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
+#endif
+
 #define LOG_LEVEL CONFIG_PS2_LOG_LEVEL
 LOG_MODULE_REGISTER(ps2_gpio);
 
 /*
  * Settings
  */
+
+// PS/2 host pins must genuinely pull the CLK/DATA lines low: they fight the
+// board's 1K pull-ups (plus the module's internal pull-ups) during clock
+// inhibit and data-bit drives, so the default Standard open-drain drive
+// (~2mA sink) is too weak - the line never drops below the device's input
+// low threshold and the device keeps running its own clock (observed as a
+// burst of 'Write interrupt pos=start' edges while CLK is supposedly
+// inhibited). High drive open-drain (H0D1, ~10mA sink) pins the line low.
+#if defined(CONFIG_SOC_SERIES_NRF52X)
+#define PS2_GPIO_OUTPUT_FLAGS (GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN | NRF_GPIO_DRIVE_H0)
+#else
+#define PS2_GPIO_OUTPUT_FLAGS (GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN)
+#endif
 
 #define PS2_GPIO_WRITE_MAX_RETRY 5
 #define PS2_GPIO_READ_MAX_RETRY 3
@@ -341,12 +358,10 @@ int ps2_gpio_configure_pin_scl_input() {
 
 int ps2_gpio_configure_pin_scl_output() {
   // Open-drain: PS/2 spec forbids the host from driving CLK high (host may
-  // only pull low or release). Push-pull high fought the device's open-drain
-  // low, so the TrackPoint never started the write clock (0xe1/0xf4 scl
-  // timeout at pos=1). Release state is pulled high by the external/onboard
-  // pull-up resistor.
-  return ps2_gpio_configure_pin_scl((GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN),
-                                    "output");
+  // only pull low or release). Release state is pulled high by the onboard
+  // pull-up resistor. High drive on the 0 level (PS2_GPIO_OUTPUT_FLAGS)
+  // guarantees the inhibit low actually reaches the device.
+  return ps2_gpio_configure_pin_scl(PS2_GPIO_OUTPUT_FLAGS, "output");
 }
 
 int ps2_gpio_configure_pin_sda(gpio_flags_t flags, char *descr) {
@@ -366,11 +381,9 @@ int ps2_gpio_configure_pin_sda_input() {
 }
 
 int ps2_gpio_configure_pin_sda_output() {
-  // Open-drain, same rationale as SCL: data bit 1 = release (pulled high by
-  // the pull-up), data bit 0 = drive low. Device ACK (pull-low) never fights
-  // a push-pull high.
-  return ps2_gpio_configure_pin_sda((GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN),
-                                    "output");
+  // Open-drain, high drive on the 0 level: same rationale as SCL. Device ACK
+  // (pull-low) must not fight a weak host-low.
+  return ps2_gpio_configure_pin_sda(PS2_GPIO_OUTPUT_FLAGS, "output");
 }
 
 bool ps2_gpio_get_byte_parity(uint8_t byte) {
