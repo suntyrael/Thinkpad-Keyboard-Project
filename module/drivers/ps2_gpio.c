@@ -69,7 +69,15 @@ LOG_MODULE_REGISTER(ps2_gpio);
 // PS2 uses a frequency between 10 kHz and 16.7 kHz. So clocks should arrive
 // within 60-100us.
 #define PS2_GPIO_TIMING_SCL_CYCLE_MIN 60
-#define PS2_GPIO_TIMING_SCL_CYCLE_MAX 100
+
+// Real-world TrackPoint (TP4) modules clock around 12-16 kHz (60-90 us per
+// clock) but insert a noticeably longer gap (~350-500 us) before the stop
+// bit of a host write. The original 100us per-bit bound made the driver
+// abort the write at pos=stop (and false-trigger 'missed interrupt' read
+// aborts) before the device's slow stop/ack clocks arrived. Use a generous
+// bound: per-bit timeouts then tolerate slow/pausing devices while still
+// catching a device that truly goes silent mid-frame.
+#define PS2_GPIO_TIMING_SCL_CYCLE_MAX 2000
 
 // The minimum time needed to inhibit clock to start a write
 // is 100us, but we triple it just in case.
@@ -1141,6 +1149,12 @@ void ps2_gpio_write_interrupt_handler() {
     // so that we can receive the ack bit from the device
     ps2_gpio_configure_pin_sda_input();
   } else if (data->cur_write_pos == PS2_GPIO_POS_ACK) {
+    // Sample the ack bit a little after the clock edge: the device pulls
+    // DATA low at/just after the ack clock edge, and reading it in the ISR
+    // at the exact edge can catch the previous (stop bit = high) level on
+    // the wire. A short settle delay gives the line time to reach low
+    // (real-world fix for 'Write failed on ack' with sda still reading 1).
+    k_busy_wait(50);
     int ack_val = ps2_gpio_get_sda();
 
     LOG_PS2_INT("Write interrupt", NULL);
