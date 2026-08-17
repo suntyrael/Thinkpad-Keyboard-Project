@@ -557,12 +557,12 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
   bool button_l_pressed = false;
   bool button_l_released = false;
   if (button_l == true && data->button_l_is_held == false) {
-    LOG_INF("Pressed button_l");
+    LOG_DBG("Pressed button_l");
 
     button_l_pressed = true;
     buttons_pressed++;
   } else if (button_l == false && data->button_l_is_held == true) {
-    LOG_INF("Releasing button_l");
+    LOG_DBG("Releasing button_l");
 
     button_l_released = true;
     buttons_released++;
@@ -571,12 +571,12 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
   bool button_m_released = false;
   bool button_m_pressed = false;
   if (button_m == true && data->button_m_is_held == false) {
-    LOG_INF("Pressing button_m");
+    LOG_DBG("Pressing button_m");
 
     button_m_pressed = true;
     buttons_pressed++;
   } else if (button_m == false && data->button_m_is_held == true) {
-    LOG_INF("Releasing button_m");
+    LOG_DBG("Releasing button_m");
 
     button_m_released = true;
     buttons_released++;
@@ -585,12 +585,12 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
   bool button_r_released = false;
   bool button_r_pressed = false;
   if (button_r == true && data->button_r_is_held == false) {
-    LOG_INF("Pressing button_r");
+    LOG_DBG("Pressing button_r");
 
     button_r_pressed = true;
     buttons_pressed++;
   } else if (button_r == false && data->button_r_is_held == true) {
-    LOG_INF("Releasing button_r");
+    LOG_DBG("Releasing button_r");
 
     button_r_released = true;
     buttons_released++;

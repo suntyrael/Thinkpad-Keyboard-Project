@@ -34,6 +34,7 @@
 #include <zmk/events/ble_active_profile_changed.h>
 #include <zmk/events/layer_state_changed.h>
 #include <zmk/events/position_state_changed.h>
+#include <zmk/events/usb_conn_state_changed.h>
 
 #include "board_hw.h"
 
@@ -66,6 +67,14 @@ static volatile bool is_idle = false;
 static volatile bool layer1_active = false;
 static volatile bool pwr_key_held = false;
 static volatile int64_t pwr_key_press_time = 0;
+
+/* VBUS (USB power present) for the charging LED and the low-battery shutdown
+ * guard. Event-driven: nRF52840 POWER peripheral USB-detect interrupts raise
+ * USB_DC_CONNECTED/DISCONNECTED -> zmk_usb_conn_state_changed, so no polling
+ * is needed (2026-08-17; the earlier 80 ms / 1 s / 2 min polling was removed
+ * after tracing usb_dc_nrfx.c usb_dc_power_event_handler). Initial value is
+ * read once at LED thread start; afterwards only the listener updates it. */
+static volatile bool vbus_present = false;
 
 /* --------------------------------------------------------------------------
  * LED worker thread
@@ -141,11 +150,11 @@ static void led_thread_fn(void *a, void *b, void *c) {
     }
 
 /* ---- Battery Critical Shutdown (<3.4V / <2% SoC) ---- */
-/* Use Nordic HAL for VBUS detection (safe, no raw register access) */
+/* Read the initial VBUS state once (event listener updates it afterwards). */
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
-    bool vbus_present = zmk_usb_is_powered();
+    vbus_present = zmk_usb_is_powered();
 #else
-    bool vbus_present = false;
+    vbus_present = false;
 #endif
 
     if (battery_soc < 2 && !vbus_present) {
@@ -330,6 +339,20 @@ static int layer_state_listener(const zmk_event_t *eh) {
 
 ZMK_LISTENER(status_leds_layer, layer_state_listener);
 ZMK_SUBSCRIPTION(status_leds_layer, zmk_layer_state_changed);
+
+/* VBUS power state - event-driven by the nRF52840 POWER USB-detect interrupt
+ * (USB_DC_CONNECTED/DISCONNECTED -> zmk_usb_conn_state_changed). No polling. */
+static int usb_conn_state_listener(const zmk_event_t *eh) {
+  const struct zmk_usb_conn_state_changed *ev =
+      as_zmk_usb_conn_state_changed(eh);
+  if (ev != NULL) {
+    vbus_present = (ev->conn_state != ZMK_USB_CONN_NONE);
+  }
+  return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(status_leds_usb, usb_conn_state_listener);
+ZMK_SUBSCRIPTION(status_leds_usb, zmk_usb_conn_state_changed);
 
 /* --------------------------------------------------------------------------
  * ZMK Event Listeners
