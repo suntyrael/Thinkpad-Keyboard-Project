@@ -1192,13 +1192,19 @@ void ps2_gpio_write_interrupt_handler() {
     // so that we can receive the ack bit from the device
     ps2_gpio_configure_pin_sda_input();
   } else if (data->cur_write_pos == PS2_GPIO_POS_ACK) {
-    // Sample the ack bit a little after the clock edge: the device pulls
-    // DATA low at/just after the ack clock edge, and reading it in the ISR
-    // at the exact edge can catch the previous (stop bit = high) level on
-    // the wire. A short settle delay gives the line time to reach low
-    // (real-world fix for 'Write failed on ack' with sda still reading 1).
-    k_busy_wait(50);
-    int ack_val = ps2_gpio_get_sda();
+    // The device asserts DATA low only briefly around the ack clock (its
+    // low window measured at ~50us - right at the edge of a single fixed
+    // delay, which made ACK success a coin flip). Poll the line in a tight
+    // loop instead: the first 0 sampled within the window wins; if the line
+    // stays high through the whole window the device did not ACK.
+    int ack_val = 1;
+    for (int i = 0; i < 12; i++) {
+      k_busy_wait(5);
+      ack_val = ps2_gpio_get_sda();
+      if (ack_val == 0) {
+        break;
+      }
+    }
 
     LOG_PS2_INT("Write interrupt", NULL);
 
@@ -1449,6 +1455,11 @@ static int ps2_gpio_init(const struct device *dev) {
       "Initializing ps2_gpio driver with pins... SCL: P%d.%02d; SDA: P%d.%02d",
       config->scl_gpio_port_num, config->scl_gpio.pin,
       config->sda_gpio_port_num, config->sda_gpio.pin);
+
+  // Boot-time version marker so a mis-flashed old build is obvious in the
+  // log (the app build id in the banner does not change for module edits).
+  LOG_INF("PS/2 config: high-drive H0D1 output + poll-based ACK sampling + "
+          "2000us per-bit timeout + 250ms post-POR settle");
 
   // Set the ps2 device so we can retrieve it later for
   // the ps2 callback
