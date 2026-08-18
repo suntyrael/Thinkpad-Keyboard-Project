@@ -21,7 +21,7 @@
 ### 指针指点杆 (TrackPoint PS/2) 引脚
 *   **时钟线 (TP4CLK)**：P1.13，带内部上拉。
 *   **数据线 (TP4DATA)**：P1.10，带内部上拉.
-*   **复位线 (TP4_RESET)**：P1.09，低电平有效。
+*   **复位线 (TP4_RESET)**：P1.09，**高电平有效**（高=复位，低=运行；2026-08-17 CoB 实测：模块仅在 P1.09 为低时通信，拉高即永久静默，与早期固件假设的"低电平复位"相反）。
 
 ### 独立直连按键
 *   **ThinkVantage (HOTKEY)**：P1.08，带内部上拉，低电平有效。
@@ -452,3 +452,16 @@
    - 顺带压低两处"每次操作必打"的 INFO 日志：`input_mouse_ps2.c` 指点杆六路按键日志（按下/释放 × 左中右）降为 DBG；`ps2_uart.c` 写中断处理中每 SCL bit 一条的 `Inside ps2_uart_write_scl_interrupt_handler_blocking` 降为 DBG（当前用 gpio 模式未触发，属隐患）。
    - 保留说明：`CONFIG_ZMK_BATTERY_REPORT_INTERVAL=10`（电量采样 10s）不随本次改动——低电量关机（<2% SoC 且无 VBUS）的响应依赖它及时更新，采样间隔拉太长会滞后关机保护（v1.0.35）。
 4. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 321700 B（39.67%）、RAM 87098 B（33.23%）。上电后不再出现 80ms 刷屏；插拔 USB（含纯充电口）由中断事件即时更新充电指示灯。
+### [2026-08-17] v1.0.45 — PS/2 指点杆 bring-up：RST 极性实证修正（高电平复位，只拉低不脉冲）+ 完整镜像应用标记修复
+1. **RST 极性实证（实机日志交叉对比）**：
+   - 原始固件假设"低电平复位"：P1.09 拉低 600ms 后释放回高。实测发现：**模块仅在 P1.09 为低时通信，拉高即永久静默**——旧固件 1.967s 释放回高后，设备再未响应任何命令。
+   - 模块上电后（~1.6s）自行执行 POR 并发送 BAT 结果，与 RST 电平无关；板上 R14（5.1K）把 RST 上拉，模块自始至终被按在复位态，直到固件显式拉低。
+2. **启动窗口关键发现**：RST 电平在模块启动窗口（释放后 ~300ms 的 POST 期）决定其命运——**RST 低 → 正常发送一次 BAT 结果后安静等待主机；RST 高 → 卡入持续吐乱码状态**（0xFF 类帧、偶校验有效：0xfc/0x7e/0xf3/0xd7/0xf5…），释放后也不恢复。
+3. **修复方案**：
+   - `module/drivers/input_mouse_ps2.c`：`zmk_mouse_ps2_init_power_on_reset()` 删除 600ms 复位脉冲，改为**直接输出低并保持**（模块上电即被板上上拉复位，此即足够复位期）；注释记录完整实证。
+   - 新增引脚回读日志：`RST pin P1.09 driven low: raw=0 PIN_CNF=0x...`（raw=0 + DIR=output 即证明固件真正驱动为低，便于排查飞线/接线问题）。
+   - `thinkpad_wireless.dts`：`rst-gpios` 由 `GPIO_ACTIVE_LOW` 改为 `GPIO_ACTIVE_HIGH`（高电平复位/低电平运行）。
+   - `module/drivers/ps2_gpio.c`：启动版本标记升级为 **v5**（`PS/2 config v5: ... RST held LOW (no pulse)`），旧固件（600ms 脉冲 / RST 回高）在 log 中一眼可辨。
+4. **完整镜像合并修复**：`tools/merge_hex.py` 合并完整镜像**必须加 `--mark-app-valid`**（在 0xFF000 settings 页写入 bank_0=0x0001 + crc=0 + app_size）。缺失时 adafruit bootloader 判定应用无效、停留在 DFU 模式，设备不枚举串口/HID（无响应）。烧录完整镜像需勾选 "Erase all"。`firmware/` 目录按 `thinkpad_wireless_full_v5.hex` 命名输出带版本完整镜像。
+5. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 324100 B（39.96%）、RAM 167170 B（63.77%）。v5 固件实机 log 确认：`raw=0`、无 600ms 脉冲、RST 保持低。
+6. **当前 bring-up 状态（未解决）**：RST 问题已闭环，但设备传输仍为乱码（读帧 `0xfd/0xff/0xc0/0xfc/0xf9`，无 BAT 成功码 0xAA），主机写从未成功（全部 scl timeout，设备不响应）。中断日志显示读采样点 scl 全为 0（上升沿触发但采样时已回落）且数据位呈 1/0 交替——CLK 波形异常（高电平极短/振荡）。证据指向**模块供电与信号通路**：TP4 规格要求 VCC > 4.5V（当前调试用 3.3V，欠压运行），且 CLK/DATA 上拉轨 VDD3V3/5V_CONN（FPC2.19）在 CoB 板上无供电来源。下一步：模组供电改 5V、示波器验证 CLK/DATA 波形、模组接已知良好 PS/2 主机验证。

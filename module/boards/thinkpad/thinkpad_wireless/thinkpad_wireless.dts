@@ -140,7 +140,7 @@
         status = "okay";
         compatible = "zmk,input-mouse-ps2";
         ps2-device = <&gpio_ps2>;
-        rst-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>; /* TP4_RESET -> P1.09 (CoB) */
+        rst-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>; /* TP4_RESET -> P1.09 (CoB), 高电平复位/低电平运行 */
     };
 
     mouse_ps2_input_listener: mouse_ps2_input_listener {
