@@ -51,7 +51,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 // Specification`...
 // "The POR shall be timed to occur 600 ms ± 20 % from the time power is
 //  applied to the TrackPoint controller."
-#define MOUSE_PS2_POWER_ON_RESET_TIME K_MSEC(600)
+// No RST pulse is issued (see zmk_mouse_ps2_init_power_on_reset): the module
+// runs its own power-on POR and must not have RST asserted during startup,
+// so the old 600ms pulse constant is gone.
 
 // Common PS/2 Mouse commands
 #define MOUSE_PS2_CMD_GET_DEVICE_ID "\xf2"
@@ -1827,6 +1829,25 @@ static void zmk_mouse_ps2_init_thread(const struct device *dev, int unused) {
 //  the time power is applied to the TrackPoint controller. Activity on the
 //  clock and data lines is ignored prior to the completion of the diagnostic
 //  sequence. (See RESET mode of operation.)"
+//
+// CoB board bring-up findings (2026-08-17):
+//  1. This module's RST line is ACTIVE-HIGH (HIGH = reset, LOW = run), the
+//     inverse of what early firmware assumed. The pin is pulled up on the
+//     board, so the module powers up in reset.
+//  2. The RST level DURING the module's startup window decides its fate:
+//       - RST held LOW during startup -> module sends its BAT result once,
+//         then waits quietly for the host (normal PS/2 behaviour).
+//       - RST pulsed HIGH during startup -> module latches into a
+//         continuous-garbage transmission state (0xFF-like frames with valid
+//         parity) and never responds to host writes again, even after RST is
+//         released.
+//  3. The module runs its own power-on POR on its own schedule (~1.6s after
+//     power) regardless of the RST level, so there is no need to pulse RST at
+//     all.
+//
+// Correct handling: drive RST LOW (release) as early as possible and keep it
+// LOW - do NOT pulse it. The module has been held in reset by the pull-up
+// since power-on, which is a sufficient reset period.
 int zmk_mouse_ps2_init_power_on_reset() {
   struct zmk_mouse_ps2_data *data = &zmk_mouse_ps2_data;
   const struct zmk_mouse_ps2_config *config = &zmk_mouse_ps2_config;
@@ -1843,7 +1864,10 @@ int zmk_mouse_ps2_init_power_on_reset() {
     data->rst_gpio = config->rst_gpio;
   }
 
-  // Set reset pin low (0V) to trigger active-low reset
+  // Release: drive the pin LOW (physical) and keep it LOW. The module runs
+  // only while RST is LOW, and asserting HIGH during its startup window
+  // latches it into a continuous-garbage state (see comment above), so no
+  // reset pulse is issued.
   int err = gpio_pin_configure_dt(&data->rst_gpio, GPIO_OUTPUT_LOW);
   if (err) {
     LOG_ERR("Failed Power-On-Reset: Failed to configure RST GPIO pin to "
@@ -1852,17 +1876,22 @@ int zmk_mouse_ps2_init_power_on_reset() {
     return err;
   }
 
-  // Wait 600ms
-  k_sleep(MOUSE_PS2_POWER_ON_RESET_TIME);
-
-  // Release reset pin high (3.3V) to let trackpoint start up
-  err = gpio_pin_set_raw(data->rst_gpio.port, data->rst_gpio.pin, 1);
-  if (err) {
-    LOG_ERR("Failed Power-On-Reset: Failed to set RST GPIO pin to "
-            "high (err %d)",
-            err);
-    return err;
-  }
+  // Self-check: read back the raw pin level and the PIN_CNF register so the
+  // boot log proves what level P1.09 is actually driven to (useful when the
+  // RST net is wired up independently on the bench).
+  int raw = gpio_pin_get_raw(data->rst_gpio.port, data->rst_gpio.pin);
+#if defined(CONFIG_SOC_SERIES_NRF52X)
+  uintptr_t base = (config->rst_gpio_port_num == 0) ? 0x50000000UL
+                                                    : 0x50000300UL;
+  uint32_t pincnf = *(volatile uint32_t *)(base + 0x700 +
+                                           4UL * (uint32_t)config->rst_gpio.pin);
+  LOG_INF("RST pin P%d.%02d driven low: raw=%d PIN_CNF=0x%08x (expect raw=0, "
+          "DIR=output)",
+          config->rst_gpio_port_num, config->rst_gpio.pin, raw, pincnf);
+#else
+  LOG_INF("RST pin P%d.%02d driven low: raw=%d (expect raw=0)",
+          config->rst_gpio_port_num, config->rst_gpio.pin, raw);
+#endif
 
   LOG_DBG("Finished Power-On-Reset successfully...");
 

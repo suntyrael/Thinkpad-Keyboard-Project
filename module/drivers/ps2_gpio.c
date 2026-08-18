@@ -1498,8 +1498,12 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  LOG_INF("PS/2 config: high-drive H0D1 output + poll-based ACK sampling + "
-          "2000us per-bit timeout + 250ms post-POR settle");
+  // Marker v5: RST (P1.09) is driven LOW at ~1.4s and held (no 600ms pulse).
+  // If the log shows a 600ms gap between "Performing Power-On-Reset" and
+  // "Finished Power-On-Reset", or RST stays at 3.3V after boot, the flashed
+  // image is stale.
+  LOG_INF("PS/2 config v5: H0D1 output + rising-edge reads + RST held LOW "
+          "(no pulse) + 2000us per-bit timeout");
 
   // Set the ps2 device so we can retrieve it later for
   // the ps2 callback
