@@ -701,6 +701,9 @@ void ps2_gpio_read_finish();
 // ps2_gpio_read_process_received_byte, which decides what should happen
 // with it.
 void ps2_gpio_read_interrupt_handler() {
+  // Sample SDA immediately at ISR entry to avoid any latency or jitter
+  int sda_val = ps2_gpio_get_sda();
+
   struct ps2_gpio_data *data = &ps2_gpio_data;
 
   uint32_t cur_read_cycle_cnt = k_cycle_get_32();
@@ -723,8 +726,6 @@ void ps2_gpio_read_interrupt_handler() {
   k_work_cancel_delayable(&data->read_scl_timout);
 
   LOG_PS2_INT("Read interrupt", NULL);
-
-  int sda_val = ps2_gpio_get_sda();
 
   if (data->cur_read_pos == PS2_GPIO_POS_START) {
     // The first bit of every transmission should be 0.
@@ -1521,9 +1522,11 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v9: device->host reads on the FALLING edge, 600ms RST pulse then
-  // released HIGH, bit-clear assignment fix, no 0xFE resend during init.
-  LOG_INF("PS/2 config v9: H0D1 in/out + falling-edge reads + bit-clear fix + "
+  // Marker v10: device->host reads on the FALLING edge (immediate sample),
+  // 600ms RST pulse then released HIGH, bit-clear assignment fix, no 0xFE
+  // resend during init.
+  LOG_INF("PS/2 config v10: H0D1 in/out + falling-edge reads (immediate) + "
+          "bit-clear fix + "
           "600ms RST pulse + no-resend in init + 2000us timeout");
 
   // Set the ps2 device so we can retrieve it later for
