@@ -130,10 +130,9 @@ static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec,
 #define PS2_GPIO_TIMING_SCL_INHIBITION_TIMER_DELAY_MAX 1000
 
 // After inhibiting and releasing the clock, the device starts sending
-// the clock. It's supposed to start immediately, but some devices
-// need much longer if you are asking them to interrupt an
-// ongoing read.
-#define PS2_GPIO_TIMING_SCL_INHIBITION_RESP_MAX 10000
+// the clock. The IBM TrackPoint spec allows up to 20-50ms for the device to
+// detect Request-to-Send (RTS) and begin generating clock pulses.
+#define PS2_GPIO_TIMING_SCL_INHIBITION_RESP_MAX 50000
 
 // Writes start with us inhibiting the line and then respond
 // with 11 bits (start bit included in inhibition time).
@@ -1151,9 +1150,9 @@ int ps2_gpio_write_byte_start(uint8_t byte) {
 
   LOG_PS2_INT("Starting write of byte ", &byte);
 
-  // Inhibit the line by setting clock low and data high
+  // Inhibit the line by setting clock low and data low (RTS start bit)
   ps2_gpio_set_scl(0);
-  ps2_gpio_set_sda(1);
+  ps2_gpio_set_sda(0);
 
   LOG_PS2_INT("Inhibited clock line", NULL);
 
@@ -1172,25 +1171,19 @@ void ps2_gpio_write_inhibition_wait(struct k_work *item) {
   struct ps2_gpio_data *data =
       CONTAINER_OF(d_work, struct ps2_gpio_data, write_inhibition_wait);
 
-  // Enable the scl interrupt again - FALLING edge for write mode (the host
+  // Enable the scl interrupt - FALLING edge for write mode (the host
   // sets the next data bit on each falling edge; the device samples it on
   // the following rising edge).
   ps2_gpio_set_scl_callback(true, false);
 
-  // Set data to value of start bit
-  ps2_gpio_set_sda(0);
-
-  LOG_PS2_INT("Set sda to start bit", NULL);
-
-  // The start bit was sent by setting sda to low
-  // So the next scl interrupt will be for the first
-  // data bit.
+  // SDA is already held low (RTS start bit = 0) throughout the inhibition
+  // period.
   data->cur_write_pos += 1;
 
-  // Release the clock line and configure it as input
-  // This let's the device take control of the clock again
-  ps2_gpio_set_scl(1);
+  // Release the clock line and configure it as input to let the device generate
+  // clocks
   ps2_gpio_configure_pin_scl_input();
+  ps2_gpio_set_scl(1);
 
   LOG_PS2_INT("Released clock", NULL);
 
@@ -1522,12 +1515,12 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v10: device->host reads on the FALLING edge (immediate sample),
-  // 600ms RST pulse then released HIGH, bit-clear assignment fix, no 0xFE
-  // resend during init.
-  LOG_INF("PS/2 config v10: H0D1 in/out + falling-edge reads (immediate) + "
-          "bit-clear fix + "
-          "600ms RST pulse + no-resend in init + 2000us timeout");
+  // Marker v11: device->host reads on the FALLING edge (immediate sample),
+  // 600ms RST pulse then released HIGH, 50ms RTS write timeout, no 0xFE resend
+  // in init.
+  LOG_INF("PS/2 config v11: H0D1 in/out + falling-edge reads (immediate) + "
+          "50ms RTS write timeout + 600ms RST + no-resend in init + 2000us "
+          "timeout");
 
   // Set the ps2 device so we can retrieve it later for
   // the ps2 callback
