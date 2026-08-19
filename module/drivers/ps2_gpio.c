@@ -252,12 +252,6 @@ struct ps2_gpio_data {
   uint8_t write_awaits_resp_byte;
   struct k_sem write_awaits_resp_sem;
 
-  // Set when the write handler reaches the ACK position: the SCL interrupt
-  // is switched to the RISING edge and the next edge samples the device's
-  // ACK (device holds DATA low through the whole ack bit, so sampling at
-  // its rising edge is stable - see ps2_gpio_write_interrupt_handler).
-  bool ack_rising_pending;
-
   struct k_work resend_cmd_work;
 };
 
@@ -289,7 +283,6 @@ static struct ps2_gpio_data ps2_gpio_data = {
 
     .write_awaits_resp = false,
     .write_awaits_resp_byte = 0x0,
-    .ack_rising_pending = false,
 };
 
 K_THREAD_STACK_DEFINE(ps2_gpio_work_queue_stack_area,
@@ -1150,52 +1143,36 @@ int ps2_gpio_write_byte_start(uint8_t byte) {
 
   LOG_PS2_INT("Starting write of byte ", &byte);
 
-  // Inhibit the line by setting clock low and data low (RTS start bit)
+  // Inhibit SCL: pull SCL low and SDA high for 150us
   ps2_gpio_set_scl(0);
+  ps2_gpio_set_sda(1);
+  k_busy_wait(150);
+
+  // Set Request-to-Send Start Bit: pull SDA low for 150us while SCL remains low
   ps2_gpio_set_sda(0);
+  k_busy_wait(150);
 
-  LOG_PS2_INT("Inhibited clock line", NULL);
+  LOG_PS2_INT("Inhibited clock line and set start bit", NULL);
 
-  // Keep the line inhibited for at least 100 microseconds
-  k_work_schedule_for_queue(&ps2_gpio_work_queue, &data->write_inhibition_wait,
-                            PS2_GPIO_WRITE_INHIBIT_SLC_DURATION);
-
-  // The code continues in ps2_gpio_write_inhibition_wait
-  return 0;
-}
-
-void ps2_gpio_write_inhibition_wait(struct k_work *item) {
-  LOG_PS2_INT("Inhibition timer finished", NULL);
-
-  struct k_work_delayable *d_work = k_work_delayable_from_work(item);
-  struct ps2_gpio_data *data =
-      CONTAINER_OF(d_work, struct ps2_gpio_data, write_inhibition_wait);
-
-  // Enable the scl interrupt - FALLING edge for write mode (the host
-  // sets the next data bit on each falling edge; the device samples it on
-  // the following rising edge).
-  ps2_gpio_set_scl_callback(true, false);
-
-  // SDA is already held low (RTS start bit = 0) throughout the inhibition
-  // period.
+  // Start bit sent; next SCL falling edge will be for data bit 0 (cur_write_pos
+  // = 1)
   data->cur_write_pos += 1;
 
-  // Release the clock line and configure it as input to let the device generate
-  // clocks
+  // Release clock line and configure as input with falling edge interrupt
   ps2_gpio_configure_pin_scl_input();
   ps2_gpio_set_scl(1);
+  ps2_gpio_set_scl_callback(true, false);
 
   LOG_PS2_INT("Released clock", NULL);
 
   k_work_schedule_for_queue(&ps2_gpio_work_queue, &data->write_scl_timout,
                             PS2_GPIO_TIMEOUT_WRITE_SCL_START);
 
-  // From here on the device takes over the control of the clock again
-  // Every time it is ready for the next bit to be trasmitted, it will...
-  //  - Pull the clock line low
-  //  - Which will trigger our `ps2_gpio_write_interrupt_handler`
-  //  - Which will send the correct bit
-  //  - After all bits are sent `ps2_gpio_write_finish` is called
+  return 0;
+}
+
+void ps2_gpio_write_inhibition_wait(struct k_work *item) {
+  // Synchronous inhibition in ps2_gpio_write_byte_start replaces delayed work
 }
 
 void ps2_gpio_write_interrupt_handler() {
@@ -1203,26 +1180,6 @@ void ps2_gpio_write_interrupt_handler() {
   // the clock and asks us for a new bit of data on
   // each falling edge.
   struct ps2_gpio_data *data = &ps2_gpio_data;
-
-  // ACK sample: the interrupt was switched to the RISING edge at the ACK
-  // position; this edge is the end of the ack bit, when DATA is still held
-  // low by the device. Sample and finish the write.
-  if (data->ack_rising_pending) {
-    data->ack_rising_pending = false;
-    int ack_val = ps2_gpio_get_sda();
-
-    LOG_PS2_INT("Write interrupt", NULL);
-
-    if (ack_val == 0) {
-      LOG_PS2_INT("Write was successful on ack: ", NULL);
-      ps2_gpio_write_finish(true, "valid ack bit");
-    } else {
-      LOG_PS2_INT("Write failed on ack", NULL);
-      ps2_gpio_write_finish(false, "invalid ack bit");
-    }
-
-    return;
-  }
 
   if (data->cur_write_pos == PS2_GPIO_POS_START) {
     // This should not be happening, because the PS2_GPIO_POS_START bit
@@ -1249,19 +1206,17 @@ void ps2_gpio_write_interrupt_handler() {
     // so that we can receive the ack bit from the device
     ps2_gpio_configure_pin_sda_input();
   } else if (data->cur_write_pos == PS2_GPIO_POS_ACK) {
-    // ACK: the device pulls DATA low and holds it through the whole ack
-    // bit. Switch the SCL interrupt to the RISING edge and sample DATA
-    // there - the line is stable at that point (a fixed delay / polling
-    // loop after the falling edge sits at the boundary of the device's
-    // brief DATA-low window and was a coin flip).
-    ps2_gpio_set_scl_callback(true, true);
-    data->ack_rising_pending = true;
-
-    // Guard against the rising edge never arriving: abort the write.
-    k_work_schedule_for_queue(&ps2_gpio_work_queue, &data->write_scl_timout,
-                              PS2_GPIO_TIMEOUT_WRITE_SCL);
+    int ack_val = ps2_gpio_get_sda();
 
     LOG_PS2_INT("Write interrupt", NULL);
+
+    if (ack_val == 0) {
+      LOG_PS2_INT("Write was successful on ack: ", NULL);
+      ps2_gpio_write_finish(true, "valid ack bit");
+    } else {
+      LOG_PS2_INT("Write failed on ack", NULL);
+      ps2_gpio_write_finish(false, "invalid ack bit");
+    }
 
     return;
   } else {
@@ -1316,7 +1271,6 @@ void ps2_gpio_write_finish(bool successful, char *descr) {
   data->cur_read_pos = PS2_GPIO_POS_START;
   data->cur_write_pos = PS2_GPIO_POS_START;
   data->cur_write_byte = 0x0;
-  data->ack_rising_pending = false;
 
   // Give back control over data and clock line if we still hold on to it
   ps2_gpio_configure_pin_sda_input();
@@ -1515,11 +1469,9 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v11: device->host reads on the FALLING edge (immediate sample),
-  // 600ms RST pulse then released HIGH, 50ms RTS write timeout, no 0xFE resend
-  // in init.
-  LOG_INF("PS/2 config v11: H0D1 in/out + falling-edge reads (immediate) + "
-          "50ms RTS write timeout + 600ms RST + no-resend in init + 2000us "
+  // Marker v12: direct falling-edge ACK sampling, 600ms RST, bit-clear fix.
+  LOG_INF("PS/2 config v12: H0D1 in/out + falling-edge reads (immediate) + "
+          "direct ACK sampling + 600ms RST + no-resend in init + 2000us "
           "timeout");
 
   // Set the ps2 device so we can retrieve it later for
