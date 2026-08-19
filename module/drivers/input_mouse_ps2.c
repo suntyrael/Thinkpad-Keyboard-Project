@@ -309,8 +309,9 @@ int zmk_mouse_ps2_settings_save();
  * Helpers
  */
 
-#define MOUSE_PS2_GET_BIT(data, bit_pos) ((data >> bit_pos) & 0x1)
-#define MOUSE_PS2_SET_BIT(data, bit_val, bit_pos) (data |= (bit_val) << bit_pos)
+#define MOUSE_PS2_GET_BIT(data, bit_pos) (((data) >> (bit_pos)) & 0x1)
+#define MOUSE_PS2_SET_BIT(data, bit_val, bit_pos)                              \
+  (data = ((data) & ~(1U << (bit_pos))) | (((bit_val)&1U) << (bit_pos)))
 
 /*
  * Mouse Activity Packet Reading
