@@ -195,7 +195,8 @@ static void led_thread_fn(void *a, void *b, void *c) {
        * only starts from a Power press made while BT layer 1 is active
        * (mirrors ht_bt_pair: ZMK resolves the binding at press time, so a
        * press on layer 0 never reaches the hold-tap) -> ~12.5 Hz blink. */
-      const bool pairing = layer1_active && pwr_key_held && pwr_key_press_time != 0 &&
+      const bool pairing = layer1_active && pwr_key_held &&
+                           pwr_key_press_time != 0 &&
                            (k_uptime_get() - pwr_key_press_time >= 2000);
       if (pairing) {
         blink_on = !blink_on;
