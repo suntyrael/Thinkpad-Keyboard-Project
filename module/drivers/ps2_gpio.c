@@ -311,8 +311,9 @@ int ps2_gpio_write_byte(uint8_t byte);
  * Helpers functions
  */
 
-#define PS2_GPIO_GET_BIT(data, bit_pos) ((data >> bit_pos) & 0x1)
-#define PS2_GPIO_SET_BIT(data, bit_val, bit_pos) (data |= (bit_val) << bit_pos)
+#define PS2_GPIO_GET_BIT(data, bit_pos) (((data) >> (bit_pos)) & 0x1)
+#define PS2_GPIO_SET_BIT(data, bit_val, bit_pos)                               \
+  (data = ((data) & ~(1U << (bit_pos))) | (((bit_val)&1U) << (bit_pos)))
 
 int ps2_gpio_get_scl() {
   const struct ps2_gpio_data *data = &ps2_gpio_data;
@@ -739,6 +740,7 @@ void ps2_gpio_read_interrupt_handler() {
       ps2_gpio_read_abort(false, "invalid start bit");
       return;
     }
+    data->cur_read_byte = 0x0;
   } else if (data->cur_read_pos > PS2_GPIO_POS_START &&
              data->cur_read_pos < PS2_GPIO_POS_PARITY) { // Data Bits
 
