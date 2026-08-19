@@ -349,12 +349,11 @@ int ps2_gpio_set_scl_callback_enabled(bool enabled) {
   return ps2_gpio_set_scl_callback(enabled, true);
 }
 
-// PS/2 timing (IBM spec / Chapweske): in the device->host direction the
-// device changes DATA while CLK is HIGH, and the host must READ it on the
-// FALLING edge / when CLK is LOW (sample ~15-25us into the low phase). Reads
-// therefore trigger on the FALLING edge. Writes use the opposite convention:
-// the host changes DATA only while CLK is LOW (falling edge) and the device
-// reads it on the RISING edge.
+// PS/2 timing: the device changes DATA on the FALLING edge of CLK, so the
+// host must sample it on the RISING edge (data is stable through the high
+// phase). Reads therefore trigger on the RISING edge; writes keep the
+// FALLING edge (the host must set the next bit as early as possible, before
+// the device samples it at the rising edge).
 int ps2_gpio_set_scl_callback(bool enabled, bool rising_edge) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
   int err;
@@ -1315,7 +1314,7 @@ void ps2_gpio_write_finish(bool successful, char *descr) {
     // and the semaphore times out.
     // In that case we want to make sure the interrupt
     // callback is enabled again.
-    ps2_gpio_set_scl_callback(true, false);
+    ps2_gpio_set_scl_callback(true, true);
   }
 
   data->mode = PS2_GPIO_MODE_READ;
@@ -1328,12 +1327,12 @@ void ps2_gpio_write_finish(bool successful, char *descr) {
   ps2_gpio_configure_pin_sda_input();
   ps2_gpio_configure_pin_scl_input();
 
-  // Back to read mode: sample on the FALLING edge (PS/2 spec: device->host
-  // data is read by the host when CLK is LOW). Make sure the scl callback is
-  // enabled - it's possible that all threads are busy, write_inhibition_wait
-  // doesn't get called in time and the semaphore times out; in that case we
-  // want the interrupt callback enabled again.
-  ps2_gpio_set_scl_callback(true, false);
+  // Back to read mode: sample on the RISING edge (data is stable through the
+  // clock high phase). Make sure the scl callback is enabled - it's possible
+  // that all threads are busy, write_inhibition_wait doesn't get called in
+  // time and the semaphore times out; in that case we want the interrupt
+  // callback enabled again.
+  ps2_gpio_set_scl_callback(true, true);
 
   // Give the semaphore to allow write_byte_blocking to continue
   k_sem_give(&data->write_lock);
@@ -1495,9 +1494,9 @@ static int ps2_gpio_init_gpio(void) {
             err);
   }
 
-  // Read mode: sample on the FALLING edge (device->host data is read when CLK
-  // is LOW per the PS/2 spec).
-  ps2_gpio_set_scl_callback(true, false);
+  // Read mode: sample on the RISING edge (data is stable through the clock
+  // high phase).
+  ps2_gpio_set_scl_callback(true, true);
   ps2_gpio_configure_pin_scl_input();
   ps2_gpio_configure_pin_sda_input();
 
@@ -1521,9 +1520,9 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v7: device->host reads on the FALLING edge, 600ms RST pulse then
+  // Marker v8: device->host reads on the RISING edge, 600ms RST pulse then
   // released HIGH, no 0xFE resend during init, H0D1 open-drain with input.
-  LOG_INF("PS/2 config v7: H0D1 in/out + falling-edge reads + 600ms RST pulse "
+  LOG_INF("PS/2 config v8: H0D1 in/out + rising-edge reads + 600ms RST pulse "
           "then released HIGH + no-resend in init + 2000us timeout");
 
   // Set the ps2 device so we can retrieve it later for
