@@ -1519,9 +1519,9 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v7: device->host reads on the FALLING edge, 50ms RST pulse then
+  // Marker v7: device->host reads on the FALLING edge, 600ms RST pulse then
   // released HIGH, no 0xFE resend during init, H0D1 open-drain with input.
-  LOG_INF("PS/2 config v7: H0D1 in/out + falling-edge reads + 50ms RST pulse "
+  LOG_INF("PS/2 config v7: H0D1 in/out + falling-edge reads + 600ms RST pulse "
           "then released HIGH + no-resend in init + 2000us timeout");
 
   // Set the ps2 device so we can retrieve it later for

@@ -52,9 +52,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 // "The POR shall be timed to occur 600 ms ± 20 % from the time power is
 //  applied to the TrackPoint controller."
 // The module runs its OWN power-on POR on power-up (completing with BAT 0xAA
-// ~1.6s from power-on). We assert a brief 50ms reset pulse on startup, then
+// ~1.6s from power-on). We assert a 600ms reset pulse on startup, then
 // release RST HIGH and wait for the module to finish its POR sequence.
-#define MOUSE_PS2_POWER_ON_RESET_TIME K_MSEC(50)
+#define MOUSE_PS2_POWER_ON_RESET_TIME K_MSEC(600)
 
 // Common PS/2 Mouse commands
 #define MOUSE_PS2_CMD_GET_DEVICE_ID "\xf2"
@@ -1866,7 +1866,7 @@ int zmk_mouse_ps2_init_power_on_reset() {
     return err;
   }
 
-  // Hold it asserted for a brief pulse (50ms), then release to the run level
+  // Hold it asserted for 600ms, then release to the run level
   // (HIGH) with input buffer connected for read-back.
   k_sleep(MOUSE_PS2_POWER_ON_RESET_TIME);
   err = gpio_pin_configure_dt(&data->rst_gpio, GPIO_OUTPUT_HIGH | GPIO_INPUT);
