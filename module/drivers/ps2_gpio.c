@@ -27,12 +27,14 @@ LOG_MODULE_REGISTER(ps2_gpio);
 // DRIVE decoding (bits 9:8): 0=S0S1, 1=H0S1, 2=S0D1, 3=H0D1 (high-drive
 // open-drain). We expect 3 for the CLK/DATA output configuration, proving
 // the high-drive open-drain config really reached the hardware register.
-static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec, int port_num,
-                                   const char *label) {
+static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec,
+                                   int port_num, const char *label) {
   uintptr_t base = (port_num == 0) ? 0x50000000UL : 0x50000300UL; // GPIO0/GPIO1
-  uint32_t pincnf = *(volatile uint32_t *)(base + 0x700 + 4UL * (uint32_t)spec->pin);
+  uint32_t pincnf =
+      *(volatile uint32_t *)(base + 0x700 + 4UL * (uint32_t)spec->pin);
   uint32_t drive = (pincnf >> 8) & 0x3U;
-  LOG_INF("PS/2 pin %s (P%d.%02d) PIN_CNF=0x%08x DRIVE=%u (0=S0S1 1=H0S1 2=S0D1 3=H0D1)",
+  LOG_INF("PS/2 pin %s (P%d.%02d) PIN_CNF=0x%08x DRIVE=%u (0=S0S1 1=H0S1 "
+          "2=S0D1 3=H0D1)",
           label, port_num, spec->pin, pincnf, drive);
 }
 
@@ -50,9 +52,10 @@ static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec, int port_num
 // burst of 'Write interrupt pos=start' edges while CLK is supposedly
 // inhibited). High drive open-drain (H0D1, ~10mA sink) pins the line low.
 #if defined(CONFIG_SOC_SERIES_NRF52X)
-#define PS2_GPIO_OUTPUT_FLAGS (GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN | NRF_GPIO_DRIVE_H0)
+#define PS2_GPIO_OUTPUT_FLAGS                                                  \
+  (GPIO_INPUT | GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN | NRF_GPIO_DRIVE_H0)
 #else
-#define PS2_GPIO_OUTPUT_FLAGS (GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN)
+#define PS2_GPIO_OUTPUT_FLAGS (GPIO_INPUT | GPIO_OUTPUT_HIGH | GPIO_OPEN_DRAIN)
 #endif
 
 #define PS2_GPIO_WRITE_MAX_RETRY 5
@@ -345,18 +348,18 @@ int ps2_gpio_set_scl_callback_enabled(bool enabled) {
   return ps2_gpio_set_scl_callback(enabled, true);
 }
 
-// PS/2 timing: the device changes DATA on the FALLING edge of CLK, so the
-// host must sample it on the RISING edge (data is stable through the high
-// phase). Reads therefore trigger on the RISING edge; writes keep the
-// FALLING edge (the host must set the next bit as early as possible, before
-// the device samples it at the rising edge).
+// PS/2 timing (IBM spec / Chapweske): in the device->host direction the
+// device changes DATA while CLK is HIGH, and the host must READ it on the
+// FALLING edge / when CLK is LOW (sample ~15-25us into the low phase). Reads
+// therefore trigger on the FALLING edge. Writes use the opposite convention:
+// the host changes DATA only while CLK is LOW (falling edge) and the device
+// reads it on the RISING edge.
 int ps2_gpio_set_scl_callback(bool enabled, bool rising_edge) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
   int err;
 
-  gpio_flags_t edge = rising_edge
-                          ? (gpio_flags_t)GPIO_INT_EDGE_RISING
-                          : (gpio_flags_t)GPIO_INT_EDGE_FALLING;
+  gpio_flags_t edge = rising_edge ? (gpio_flags_t)GPIO_INT_EDGE_RISING
+                                  : (gpio_flags_t)GPIO_INT_EDGE_FALLING;
 
   if (enabled) {
     err = gpio_pin_interrupt_configure_dt(&data->scl_gpio, edge);
@@ -483,11 +486,15 @@ void ps2_gpio_data_queue_add(uint8_t byte) {
 }
 
 void ps2_gpio_send_cmd_resend_worker(struct k_work *item) {
-
-#if IS_ENABLED(CONFIG_PS2_GPIO_ENABLE_PS2_RESEND_CALLBACK)
-
   struct ps2_gpio_data *data = &ps2_gpio_data;
 
+  // Never send 0xFE resend command during initialization / before callback is
+  // enabled
+  if (!data->callback_enabled) {
+    return;
+  }
+
+#if IS_ENABLED(CONFIG_PS2_GPIO_ENABLE_PS2_RESEND_CALLBACK)
   // Notify the PS/2 device driver that we are requesting a resend.
   // PS/2 devices don't just resend the last byte that was sent, but the
   // entire command packet, which can be multiple bytes.
@@ -803,6 +810,14 @@ void ps2_gpio_read_scl_timeout(struct k_work *item) {
 void ps2_gpio_read_abort(bool should_resend, char *reason) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
 
+  // IMPORTANT: Only request resend if the callback is enabled (streaming mode).
+  // During startup, initialization, or when in raw polling mode
+  // (callback_enabled == false), NEVER send 0xFE commands to the device, as it
+  // disrupts device power-on self-test (POR) sequence!
+  if (!data->callback_enabled) {
+    should_resend = false;
+  }
+
   if (should_resend == true) {
     LOG_ERR("Aborting read with resend request on pos=%d: %s",
             data->cur_read_pos, reason);
@@ -1116,15 +1131,18 @@ int ps2_gpio_write_byte_start(uint8_t byte) {
   ps2_gpio_configure_pin_scl_output();
   ps2_gpio_configure_pin_sda_output();
 
-#if IS_ENABLED(CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED) && defined(CONFIG_SOC_SERIES_NRF52X)
+#if IS_ENABLED(CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED) &&                       \
+    defined(CONFIG_SOC_SERIES_NRF52X)
   // Self-check (once): read back the output-drive register value right after
   // the pins were configured as outputs, to prove high-drive open-drain
   // (H0D1 = DRIVE field 3) really reached the hardware.
   static bool ps2_gpio_drive_checked;
   if (!ps2_gpio_drive_checked) {
     ps2_gpio_drive_checked = true;
-    ps2_gpio_log_pin_drive(&data->scl_gpio, ps2_gpio_config.scl_gpio_port_num, "SCL");
-    ps2_gpio_log_pin_drive(&data->sda_gpio, ps2_gpio_config.sda_gpio_port_num, "SDA");
+    ps2_gpio_log_pin_drive(&data->scl_gpio, ps2_gpio_config.scl_gpio_port_num,
+                           "SCL");
+    ps2_gpio_log_pin_drive(&data->sda_gpio, ps2_gpio_config.sda_gpio_port_num,
+                           "SDA");
   }
 #endif
 
@@ -1295,7 +1313,7 @@ void ps2_gpio_write_finish(bool successful, char *descr) {
     // and the semaphore times out.
     // In that case we want to make sure the interrupt
     // callback is enabled again.
-    ps2_gpio_set_scl_callback_enabled(true);
+    ps2_gpio_set_scl_callback(true, false);
   }
 
   data->mode = PS2_GPIO_MODE_READ;
@@ -1308,11 +1326,12 @@ void ps2_gpio_write_finish(bool successful, char *descr) {
   ps2_gpio_configure_pin_sda_input();
   ps2_gpio_configure_pin_scl_input();
 
-  // Back to read mode: sample on the RISING edge again. Make sure the scl
-  // callback is enabled - it's possible that all threads are busy,
-  // write_inhibition_wait doesn't get called in time and the semaphore
-  // times out; in that case we want the interrupt callback enabled again.
-  ps2_gpio_set_scl_callback(true, true);
+  // Back to read mode: sample on the FALLING edge (PS/2 spec: device->host
+  // data is read by the host when CLK is LOW). Make sure the scl callback is
+  // enabled - it's possible that all threads are busy, write_inhibition_wait
+  // doesn't get called in time and the semaphore times out; in that case we
+  // want the interrupt callback enabled again.
+  ps2_gpio_set_scl_callback(true, false);
 
   // Give the semaphore to allow write_byte_blocking to continue
   k_sem_give(&data->write_lock);
@@ -1474,7 +1493,9 @@ static int ps2_gpio_init_gpio(void) {
             err);
   }
 
-  ps2_gpio_set_scl_callback_enabled(true);
+  // Read mode: sample on the FALLING edge (device->host data is read when CLK
+  // is LOW per the PS/2 spec).
+  ps2_gpio_set_scl_callback(true, false);
   ps2_gpio_configure_pin_scl_input();
   ps2_gpio_configure_pin_sda_input();
 
@@ -1498,12 +1519,10 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v5: RST (P1.09) is driven LOW at ~1.4s and held (no 600ms pulse).
-  // If the log shows a 600ms gap between "Performing Power-On-Reset" and
-  // "Finished Power-On-Reset", or RST stays at 3.3V after boot, the flashed
-  // image is stale.
-  LOG_INF("PS/2 config v5: H0D1 output + rising-edge reads + RST held LOW "
-          "(no pulse) + 2000us per-bit timeout");
+  // Marker v7: device->host reads on the FALLING edge, 50ms RST pulse then
+  // released HIGH, no 0xFE resend during init, H0D1 open-drain with input.
+  LOG_INF("PS/2 config v7: H0D1 in/out + falling-edge reads + 50ms RST pulse "
+          "then released HIGH + no-resend in init + 2000us timeout");
 
   // Set the ps2 device so we can retrieve it later for
   // the ps2 callback

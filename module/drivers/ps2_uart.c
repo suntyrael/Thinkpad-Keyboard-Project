@@ -942,7 +942,7 @@ void ps2_uart_write_scl_interrupt_handler_blocking(const struct device *dev,
                                                    uint32_t pins) {
   struct ps2_uart_data *data = &ps2_uart_data;
 
-    LOG_DBG("Inside ps2_uart_write_scl_interrupt_handler_blocking");
+  LOG_DBG("Inside ps2_uart_write_scl_interrupt_handler_blocking");
 
   // Cancel the SCL timeout
   k_work_cancel_delayable(&data->write_scl_timout);
