@@ -22,7 +22,10 @@
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/poweroff.h>
+#include <zephyr/logging/log.h>
 #include <zmk/usb.h>
+
+LOG_MODULE_REGISTER(status_leds, LOG_LEVEL_INF);
 
 #include <soc.h>
 #include <zmk/activity.h>
@@ -122,6 +125,26 @@ static void led_thread_fn(void *a, void *b, void *c) {
       0,  0, 0, 0,  0,  0,  0,  0,  0,  0,  0,   0,  0,  0,  0,  0};
 
   while (1) {
+    /* ---- Dump the ACTIVE clock sources once (2026-08-20, HW clock debug).
+     * Reads the nRF52840 CLOCK status registers (HFCLKSTAT / LFCLKSTAT), not
+     * Kconfig - so it reflects what is actually running. If an external
+     * crystal is configured but not oscilating, running=0 (29): HFCLK SRC /\
+     * LFCLK SRC comes from CLKSTAT.SRC: HF bit0 0=RC 1=XTAL ; LF bits0-1
+     * 0=RC 1=XTAL 2=SYNTH. STATE running = bit16. ---- */
+    static bool clock_dumped = false;
+    if (!clock_dumped) {
+      clock_dumped = true;
+      uint32_t hf = NRF_CLOCK->HFCLKSTAT;
+      uint32_t lf = NRF_CLOCK->LFCLKSTAT;
+      LOG_INF("tpkb CLOCK: HFCLK [32M] src=%s running=%u raw=0x%04x | "
+              "LFCLK [32.768k] src=%s running=%u raw=0x%04x",
+              (hf & 0x01) ? "XTAL(ext)" : "RC(int)", (hf >> 16) & 0x1u,
+              (unsigned)hf,
+              ((lf & 0x03) == 0x01) ? "XTAL(ext)"
+                                     : (((lf & 0x03) == 0x02) ? "SYNTH" : "RC(int)"),
+              (lf >> 16) & 0x1u, (unsigned)lf);
+    }
+
     /* ---- Manual Power-Off Button Check (Hold for 8 seconds) ---- */
     if (gpio_pin_get_raw(gpio1_dev, PWRSWITCH_PIN) ==
         0) { /* Pressed (active-LOW) */
@@ -239,7 +262,9 @@ static void led_thread_fn(void *a, void *b, void *c) {
            * only reliable "pairable" trigger (zmk_ble_prof_select is a no-op
            * when the profile is already active). Blink continues after the
            * keys are released until connect or timeout. */
+          LOG_INF("tpkb PAIRING: enter (layer1+pwr 2s), clearing bond + advertising");
           zmk_ble_clear_bonds();
+          LOG_INF("tpkb PAIRING: bond cleared, advertising requested");
           pairing_active = true;
           pairing_deadline = k_uptime_get() + PAIRING_TIMEOUT_MS;
           pairing_arm_start = 0;
@@ -249,6 +274,8 @@ static void led_thread_fn(void *a, void *b, void *c) {
       }
     } else if (bt_connected || k_uptime_get() >= pairing_deadline) {
       /* Exit latched pairing on connect (success) or timeout. */
+      LOG_INF("tpkb PAIRING: exit (%s)",
+              bt_connected ? "connected" : "90s timeout");
       pairing_active = false;
     }
 
