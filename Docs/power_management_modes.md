@@ -79,7 +79,7 @@
 | 自动睡眠 | 无操作（含 TrackPoint）且无 USB | 15 min | System OFF，5V 关 |
 | 手动关机 | **长按 PWRSWITCH** | **8 s** | 写 0xAA 标记 → 灯序 → 5V 关 → System OFF |
 | 低电关机 | SoC < 2% 且无 USB | 自动 | 红灯闪 5 次 → 同手动关机（写 0xAA） |
-| 配对广播 | Fn/ThinkVantage + 长按 PWRSWITCH | ≥ 2 s（無顺序依赖） | **板级**：status_leds 层 1 激活+电源键 2 s 窗口 → `zmk_ble_clear_bonds()`（清当前 BLE profile 绑定并广播，可配对新设备）→ **蓝牙灯+sport-mute+mic-mute+电源灯 4 灯同频快闪** |
+| 配对广播 | **ThinkVantage + 电源键**（非 FN） | 两者同按 ≥ 2 s，**进入后锁存（可释放）** | 状态机：ThinkVantage(pos100)+电源(pos129) 2 s → `zmk_ble_clear_bonds()` 广播 → **蓝牙灯+speaker-mute+mic-mute+电源灯 4 灯同频快闪锁存**，直至主机配对成功或 **90 s 超时**退出 |
 | 蓝牙切换 | Fn/ThinkVantage + 1..5 | 短按 | `&bt BT_SEL 0..4` |
 
 ---
@@ -90,7 +90,7 @@
 2. **5V_EN 双保险**：所有关机路径（手动 8 s、低电、0xAA 假唤醒回睡）都显式拉低 `P0.12`，ETA1061 True Shutdown 隔离 TrackPoint 漏电。
 3. **低电关机写标记**：防止"唤醒→低电→关机"循环（review 2.18）。
 4. **USB 在场不睡眠**：充电中不会被 15 min 定时关进 System OFF；低电关机判定同样排除 USB 供电场景。
-5. **配对不再依赖按键顺序（2026-08-19 修复）**：旧实现要求“先按层键（mo 1）再按电源键”——ZMK 在按下瞬间解析绑定（层 0 按下 = `&none`，无法挽回），且 status_leds 在按下瞬间快照层状态。现改为**板级配对**：只要按住电源键期间层 1 曾激活即开 2 s 窗口，满足后触发配对（见下节）；keymap 的 `ht_bt_pair` hold-tap 已移除（它底层也是 `zmk_ble_prof_select(0)`，同样失效）。
+5. **配对改为锁存状态机（2026-08-20）**：combo 改为**仅 ThinkVantage(pos100)+电源键(pos129)**（不再认层 1 / 不再被 FN 触发）。两者同按 ≥ 2 s → 进入**锁存的配对模式**：`zmk_ble_clear_bonds()` 广播 + 4 灯（蓝牙/speaker-mute/mic-mute/电源灯）12.5 Hz 快闪，**按键可释放**，直至 **BLE 连接成功**或 **90 s 超时**自动退出。注意：进入配对会清当前 profile 已保存的配对关系（ZMK BT_CLR 语义），需用新设备重新绑定。
 
 ## 七、已修复的开关机竞态（2026-08-19）
 

@@ -61,22 +61,21 @@ static volatile bool bt_connected = false;
 static volatile uint8_t battery_soc = 100; /* 0-100 %, default optimistic */
 static volatile bool is_idle = false;
 
-/* Pairing blink state (2026-08-17): Power key is held while BT layer 1 is
- * active for >= 2 s - mirrors the ht_bt_pair hold-tap in the keymap, so the
- * power LED blinks fast instead of breathing while pairing.
- *
- * 2026-08-19 (adaptor-charging pairing failure fix): the window is no longer
- * snapshotted at power-key press time. pwr_held_layer1_seen + pairing_window_start
- * let the 2 s window open whenever layer 1 becomes active while the key is
- * held, so press order (Fn-first vs. power-first) no longer matters, and the
- * pairing trigger itself moved board-side (zmk_ble_prof_select(0)) so it no
- * longer depends on the layer-0/layer-1 binding resolution at press time. */
-static volatile bool layer1_active = false;
-static volatile bool pwr_key_held = false;
-static volatile bool pwr_held_layer1_seen = false;
-static volatile int64_t pairing_window_start =
-    0; /* 0 = window closed; else uptime of window open */
-static volatile bool pairing_triggered = false;
+/* Pairing state machine (2026-08-20). Entered when the ThinkVantage key
+ * (pos 100) is held together with the power key (pos 129) for >= 2 s. Once
+ * active, pairing mode is LATCHED (the keys may be released): the 4-LED
+ * blink + advertising continue until a host connects (pairing success) or a
+ * 90 s timeout elapses.
+ *   IDLE -> (TV+pwr held >= 2 s) -> ACTIVE (clear_bonds + advertising)
+ *   ACTIVE -> (bt_connected | 90 s timeout) -> IDLE
+ * Triggered ONLY by ThinkVantage, NOT by the FN key (pos 128) even though
+ * both activate BT layer 1. */
+static volatile bool tv_key_held = false;    /* pos 100 ThinkVantage */
+static volatile bool pwr_key_held = false;   /* pos 129 power switch */
+static volatile bool pairing_active = false; /* latched pairing mode */
+static volatile int64_t pairing_arm_start =
+    0; /* uptime when both keys were first simultaneously down */
+static volatile int64_t pairing_deadline = 0; /* ACTIVE exit-by-timeout */
 
 /* VBUS (USB power present) for the charging LED and the low-battery shutdown
  * guard. Event-driven: nRF52840 POWER peripheral USB-detect interrupts raise
@@ -94,6 +93,11 @@ static volatile bool vbus_present = false;
 /* Battery level shown for ~4.8 s after boot (10 ticks * 6 * 80 ms)
  * (review 2026-08-13 item 3.2). */
 #define BOOT_DISPLAY_TICKS 10
+
+/* Latched pairing mode timeout (2026-08-20): when ThinkVantage + power key
+ * enters pairing mode, stay advertising/blinking until a host connects or
+ * this many ms elapse, then return to normal. */
+#define PAIRING_TIMEOUT_MS 90000
 
 K_THREAD_STACK_DEFINE(led_stack, LED_THREAD_STACK_SIZE);
 static struct k_thread led_thread_data;
@@ -214,39 +218,42 @@ static void led_thread_fn(void *a, void *b, void *c) {
       sys_poweroff();
     }
 
-    /* ---- Pairing detect (board-side, 2026-08-19/20) ---- */
-    /* The 2 s window opens whenever BT layer 1 is active while the power key
-     * is held - press order no longer matters. */
-    const bool pairing = pwr_held_layer1_seen && pwr_key_held &&
-                         pairing_window_start != 0 &&
-                         (k_uptime_get() - pairing_window_start >= 2000);
+    /* ---- Pairing state machine: ThinkVantage(pos100)+power(pos129) 2 s ----
+     * IDLE -> ACTIVE when both held >= 2 s; ACTIVE LATCHED until connect or
+     * 90 s timeout. FN (pos 128) does NOT participate. The 8 s manual
+     * power-off check above re-arms whenever the power key is released. */
+    if (!pairing_active) {
+      if (tv_key_held && pwr_key_held) {
+        if (pairing_arm_start == 0) {
+          pairing_arm_start = k_uptime_get();
+        } else if (k_uptime_get() - pairing_arm_start >= 2000) {
+          /* Enter latched pairing: clear bond + restart advertising - the
+           * only reliable "pairable" trigger (zmk_ble_prof_select is a no-op
+           * when the profile is already active). Blink continues after the
+           * keys are released until connect or timeout. */
+          zmk_ble_clear_bonds();
+          pairing_active = true;
+          pairing_deadline = k_uptime_get() + PAIRING_TIMEOUT_MS;
+          pairing_arm_start = 0;
+        }
+      } else {
+        pairing_arm_start = 0;
+      }
+    } else if (bt_connected || k_uptime_get() >= pairing_deadline) {
+      /* Exit latched pairing on connect (success) or timeout. */
+      pairing_active = false;
+    }
 
-    /* Pairing falling edge: restore mute/mic LEDs to OFF and hand BT/breath
-     * back to the normal logic below. */
-    if (pairing_prev && !pairing) {
+    /* Restore mute/mic on pairing falling edge (release / connect / timeout). */
+    if (pairing_prev && !pairing_active) {
       LED_OFF(gpio1_dev, MUTE_LED_PIN);
       LED_OFF(gpio1_dev, MIC_MUTE_LED_PIN);
     }
-    pairing_prev = pairing;
+    pairing_prev = pairing_active;
 
-    /* ---- Pairing trigger ---- */
-    if (pairing && !pairing_triggered) {
-      /* Root cause (2026-08-20): the old trigger used zmk_ble_prof_select(0)
-       * (via &bt BT_SEL 0 / ht_bt_pair AND the first board-side version).
-       * That API is a no-op when the index is already the active profile
-       * (ble.c: if (active_profile == index) return 0;) - and profile 0 is
-       * always active by default, so it never started/sent advertising, i.e.
-       * pairing never actually worked. The correct "enter pairable
-       * advertising" call is zmk_ble_clear_bonds(): it clears the active
-       * profile's bond and restarts advertising so a new host can pair.
-       * NOTE: this drops the previously paired device for this profile. */
-      zmk_ble_clear_bonds();
-      pairing_triggered = true;
-    }
-
-    /* ---- Pairing indication: BT + speaker-mute + mic-mute + power LEDs
-     *      blink together at ~12.5 Hz (2026-08-20) ---- */
-    if (pairing) {
+    /* ---- Pairing indication: BT + speaker-mute + mic-mute + power 4 LEDs
+     *      blink together ~12.5 Hz while pairing mode is active ---- */
+    if (pairing_active) {
       blink_on = !blink_on;
       if (blink_on) {
         LED_ON(gpio1_dev, BT_LED_PIN);
@@ -259,7 +266,7 @@ static void led_thread_fn(void *a, void *b, void *c) {
       }
       if (pwm_is_ready_dt(&pwm_led)) {
         pwm_set_pulse_dt(&pwm_led, blink_on ? pwm_led.period : 0);
-        breath_step = 0; /* freeze the breathing phase while pairing */
+        breath_step = 0; /* freeze breathing phase while pairing */
       }
     } else if (pwm_is_ready_dt(&pwm_led)) {
       /* Normal power LED: breathing. */
@@ -269,8 +276,8 @@ static void led_thread_fn(void *a, void *b, void *c) {
     }
 
     /* ---- Status LEDs (BT & Battery) updated every 6 ticks (~480ms);
-     *      skipped while pairing (the 4-LED fast blink takes over) ---- */
-    if (tick_count % 6 == 0 && !pairing) {
+     *      skipped while pairing mode is active (4-LED fast blink takes over) ---- */
+    if (tick_count % 6 == 0 && !pairing_active) {
       /* ---- BT LED ---- */
       if (is_idle) {
         LED_OFF(gpio1_dev, BT_LED_PIN);
@@ -360,60 +367,37 @@ static int mute_leds_position_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(status_leds_mute, mute_leds_position_listener);
 ZMK_SUBSCRIPTION(status_leds_mute, zmk_position_state_changed);
 
-/* Power key position tracking for the pairing blink (pos 129 = PWRSWITCH).
- * 2026-08-19: window opens on press, but is re-opened (and seen-flag set)
- * by layer_state_listener if layer 1 activates while the key is already
- * held - press order no longer matters. */
+/* Power key (pos 129 = PWRSWITCH) held state. Used only for the pairing
+ * combo with the ThinkVantage key (let the LED thread run the state machine).
+ * 2026-08-20: no longer snapshots any layer state. */
 static int power_key_position_listener(const zmk_event_t *eh) {
   const struct zmk_position_state_changed *ev =
       as_zmk_position_state_changed(eh);
   if (ev == NULL || ev->position != 129) {
     return ZMK_EV_EVENT_BUBBLE;
   }
-
   pwr_key_held = ev->state;
-  if (ev->state) {
-    pwr_held_layer1_seen = layer1_active;
-    pairing_window_start = k_uptime_get();
-    pairing_triggered = false;
-  } else {
-    pwr_held_layer1_seen = false;
-    pairing_window_start = 0; /* window closed */
-    pairing_triggered = false;
-  }
   return ZMK_EV_EVENT_BUBBLE;
 }
 
 ZMK_LISTENER(status_leds_pwr, power_key_position_listener);
 ZMK_SUBSCRIPTION(status_leds_pwr, zmk_position_state_changed);
 
-/* BT layer (layer 1) activation state - active while ThinkVantage or FN is
- * held (both are bound to mo 1). */
-static int layer_state_listener(const zmk_event_t *eh) {
-  const struct zmk_layer_state_changed *ev = as_zmk_layer_state_changed(eh);
-  if (ev != NULL && ev->layer == 1) {
-    layer1_active = ev->state;
-    if (ev->state) {
-      if (pwr_key_held) {
-        /* Power key pressed before/while the layer came up: open the 2 s
-         * pairing window from now; the board-side trigger below still
-         * fires BT_SEL 0 even though the layer-0 binding was &none. */
-        pwr_held_layer1_seen = true;
-        pairing_window_start = k_uptime_get();
-        pairing_triggered = false;
-      }
-    } else if (pwr_key_held) {
-      /* Layer dropped while Power still held: no pairing on layer 0. */
-      pwr_held_layer1_seen = false;
-      pairing_window_start = 0;
-      pairing_triggered = false;
-    }
+/* ThinkVantage key (pos 100 = matrix (5,10)) held state for pairing.
+ * 2026-08-20: pairing is triggered ONLY by ThinkVantage + power, NOT by the
+ * FN key (pos 128) even though both activate BT layer 1 (mo 1). */
+static int thinkvantage_position_listener(const zmk_event_t *eh) {
+  const struct zmk_position_state_changed *ev =
+      as_zmk_position_state_changed(eh);
+  if (ev == NULL || ev->position != 100) {
+    return ZMK_EV_EVENT_BUBBLE;
   }
+  tv_key_held = ev->state;
   return ZMK_EV_EVENT_BUBBLE;
 }
 
-ZMK_LISTENER(status_leds_layer, layer_state_listener);
-ZMK_SUBSCRIPTION(status_leds_layer, zmk_layer_state_changed);
+ZMK_LISTENER(status_leds_tv, thinkvantage_position_listener);
+ZMK_SUBSCRIPTION(status_leds_tv, zmk_position_state_changed);
 
 /* VBUS power state - event-driven by the nRF52840 POWER USB-detect interrupt
  * (USB_DC_CONNECTED/DISCONNECTED -> zmk_usb_conn_state_changed). No polling. */
