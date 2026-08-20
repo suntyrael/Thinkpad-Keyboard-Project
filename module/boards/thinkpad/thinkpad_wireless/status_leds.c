@@ -64,10 +64,20 @@ static volatile bool is_idle = false;
 
 /* Pairing blink state (2026-08-17): Power key is held while BT layer 1 is
  * active for >= 2 s - mirrors the ht_bt_pair hold-tap in the keymap, so the
- * power LED blinks fast instead of breathing while pairing. */
+ * power LED blinks fast instead of breathing while pairing.
+ *
+ * 2026-08-19 (adaptor-charging pairing failure fix): the window is no longer
+ * snapshotted at power-key press time. pwr_held_layer1_seen + pairing_window_start
+ * let the 2 s window open whenever layer 1 becomes active while the key is
+ * held, so press order (Fn-first vs. power-first) no longer matters, and the
+ * pairing trigger itself moved board-side (zmk_ble_prof_select(0)) so it no
+ * longer depends on the layer-0/layer-1 binding resolution at press time. */
 static volatile bool layer1_active = false;
 static volatile bool pwr_key_held = false;
-static volatile int64_t pwr_key_press_time = 0;
+static volatile bool pwr_held_layer1_seen = false;
+static volatile int64_t pairing_window_start =
+    0; /* 0 = window closed; else uptime of window open */
+static volatile bool pairing_triggered = false;
 
 /* VBUS (USB power present) for the charging LED and the low-battery shutdown
  * guard. Event-driven: nRF52840 POWER peripheral USB-detect interrupts raise
@@ -139,6 +149,22 @@ static void led_thread_fn(void *a, void *b, void *c) {
         }
         k_msleep(150);
 
+        /* 2026-08-19 fix (cannot power back on after 8 s shutdown):
+         * the user is typically still holding the power key when the
+         * shutdown animation ends, so GPIO DETECT (SENSE=LOW) is still
+         * asserted at sys_poweroff() and the nRF52840 immediately wakes
+         * back up (PS: "Setting the system to System OFF while DETECT is
+         * high will cause a wakeup from System OFF reset"), racing the
+         * 0xAA gate in board.c. Wait (max 1 s) for the key to be released
+         * before entering System OFF. */
+        for (int i = 0; i < 10; i++) {
+          if (gpio_pin_get_raw(gpio1_dev, PWRSWITCH_PIN) ==
+              1) { /* released */
+            break;
+          }
+          k_msleep(100);
+        }
+
         /* Cut off 5V Boost (P0.12) */
         gpio_pin_configure(gpio0_dev, BOOST_EN_PIN, GPIO_OUTPUT_LOW);
         gpio_pin_set(gpio0_dev, BOOST_EN_PIN, 0);
@@ -191,13 +217,21 @@ static void led_thread_fn(void *a, void *b, void *c) {
     /* ---- Power LED: normal breathing, fast blink during pairing ---- */
     if (pwm_is_ready_dt(&pwm_led)) {
       uint32_t period = pwm_led.period;
-      /* ThinkVantage/Fn + Power held >= 2 s = pairing. The 2 s window
-       * only starts from a Power press made while BT layer 1 is active
-       * (mirrors ht_bt_pair: ZMK resolves the binding at press time, so a
-       * press on layer 0 never reaches the hold-tap) -> ~12.5 Hz blink. */
-      const bool pairing = layer1_active && pwr_key_held &&
-                           pwr_key_press_time != 0 &&
-                           (k_uptime_get() - pwr_key_press_time >= 2000);
+      /* 2026-08-19: pairing window no longer snapshots layer state at
+       * power-key press time - it opens whenever layer 1 is active while
+       * the key is held (see power_key_position_listener / layer_state_listener).
+       * The trigger itself is also board-side (zmk_ble_prof_select(0) below)
+       * so press order no longer matters; ~12.5 Hz blink while pairing. */
+      const bool pairing = pwr_held_layer1_seen && pwr_key_held &&
+                           pairing_window_start != 0 &&
+                           (k_uptime_get() - pairing_window_start >= 2000);
+      if (pairing && !pairing_triggered) {
+        /* Keymap binding for PWRSWITCH is &none (see keymap comment): the
+         * 2 s power-key hold on BT layer 1 is handled here. zmk_ble_prof_select
+         * is the same public API used by the &bt behavior. */
+        zmk_ble_prof_select(0);
+        pairing_triggered = true;
+      }
       if (pairing) {
         blink_on = !blink_on;
         pwm_set_pulse_dt(&pwm_led, blink_on ? period : 0);
@@ -300,7 +334,10 @@ static int mute_leds_position_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(status_leds_mute, mute_leds_position_listener);
 ZMK_SUBSCRIPTION(status_leds_mute, zmk_position_state_changed);
 
-/* Power key position tracking for the pairing blink (pos 129 = PWRSWITCH) */
+/* Power key position tracking for the pairing blink (pos 129 = PWRSWITCH).
+ * 2026-08-19: window opens on press, but is re-opened (and seen-flag set)
+ * by layer_state_listener if layer 1 activates while the key is already
+ * held - press order no longer matters. */
 static int power_key_position_listener(const zmk_event_t *eh) {
   const struct zmk_position_state_changed *ev =
       as_zmk_position_state_changed(eh);
@@ -310,13 +347,13 @@ static int power_key_position_listener(const zmk_event_t *eh) {
 
   pwr_key_held = ev->state;
   if (ev->state) {
-    /* Pairing only starts when Power is pressed while the BT layer is
-     * already active: ZMK resolves the key binding at press time, so a
-     * press made on layer 0 (&none) never reaches ht_bt_pair even if the
-     * layer is activated while the key is still held (2026-08-17). */
-    pwr_key_press_time = layer1_active ? k_uptime_get() : 0;
+    pwr_held_layer1_seen = layer1_active;
+    pairing_window_start = k_uptime_get();
+    pairing_triggered = false;
   } else {
-    pwr_key_press_time = 0; /* window closed */
+    pwr_held_layer1_seen = false;
+    pairing_window_start = 0; /* window closed */
+    pairing_triggered = false;
   }
   return ZMK_EV_EVENT_BUBBLE;
 }
@@ -330,10 +367,20 @@ static int layer_state_listener(const zmk_event_t *eh) {
   const struct zmk_layer_state_changed *ev = as_zmk_layer_state_changed(eh);
   if (ev != NULL && ev->layer == 1) {
     layer1_active = ev->state;
-    if (!ev->state && pwr_key_held) {
-      /* Layer dropped while Power still held: the ht_bt_pair press window
-       * is gone (binding reverted to &none) - invalidate the timer. */
-      pwr_key_press_time = 0;
+    if (ev->state) {
+      if (pwr_key_held) {
+        /* Power key pressed before/while the layer came up: open the 2 s
+         * pairing window from now; the board-side trigger below still
+         * fires BT_SEL 0 even though the layer-0 binding was &none. */
+        pwr_held_layer1_seen = true;
+        pairing_window_start = k_uptime_get();
+        pairing_triggered = false;
+      }
+    } else if (pwr_key_held) {
+      /* Layer dropped while Power still held: no pairing on layer 0. */
+      pwr_held_layer1_seen = false;
+      pairing_window_start = 0;
+      pairing_triggered = false;
     }
   }
   return ZMK_EV_EVENT_BUBBLE;
