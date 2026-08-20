@@ -31,25 +31,6 @@
         };
     };
 
-    behaviors {
-        /* ThinkVantage + Power: hold >= 2 s triggers BT_SEL 0 (pairing /
-         * advertise); a short tap does nothing (no accidental pairing).
-         * Mirrored by the 2 s pairing logic in status_leds.c that blinks
-         * the power LED (2026-08-17). */
-        ht_bt_pair: ht_bt_pair {
-            compatible = "zmk,behavior-hold-tap";
-            #binding-cells = <2>;
-            flavor = "hold-preferred";
-            tapping-term-ms = <2000>;
-            /* hold-tap `bindings` is type: phandles (no cells allowed); the
-             * parameter comes from the keymap usage instead: the first usage
-             * cell is forwarded to the HOLD binding's param1 (BT_SEL command)
-             * and the second to the TAP binding's param1 (unused 0). &bt's
-             * param2 (profile index) stays 0, i.e. profile 0 is selected. */
-            bindings = <&bt>, <&none>;
-        };
-    };
-
     keymap {
         compatible = "zmk,keymap";
 
@@ -73,7 +54,16 @@
                 &kp INS    &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 /* Row 8: HOTKEY = Fn (mo 1), PWRSWITCH = local power on/off
                  * only (long-press in board firmware); no HID C_PWR to the
-                 * host (review 2.16) */
+                 * host (review 2.16).
+                 *
+                 * Pairing (2026-08-19): BT layer 1 + Power held >= 2 s is
+                 * now handled entirely by status_leds.c (it calls
+                 * zmk_ble_prof_select(0) and blinks the power LED). The old
+                 * ht_bt_pair hold-tap was removed because ZMK resolves a
+                 * key's binding at PRESS time: a Power press made on layer 0
+                 * was permanently bound to &none and could never pair, even
+                 * if the layer was activated while the key was held. The
+                 * board-side trigger has no such order dependency. */
                 &mo 1      &none
             >;
         };
@@ -88,14 +78,11 @@
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                &trans     &ht_bt_pair BT_SEL 0 /* Row 8: HOTKEY(mo 1)/ThinkVantage,
-                                              PWRSWITCH: hold >= 2 s -> BT_SEL 0
-                                              (pair/advertise), short tap = none.
-                                              NOTE: press ThinkVantage/Fn FIRST
-                                              (layer 1 up), THEN Power >= 2 s;
-                                              ZMK binds at press time, so pressing
-                                              Power before the layer is up never
-                                              reaches ht_bt_pair (2026-08-17) */
+                &trans     &none /* Row 8: HOTKEY(mo 1)/ThinkVantage,
+                                     PWRSWITCH: pairing is board-side now
+                                     (status_leds.c 2 s window + BT_SEL 0,
+                                     see keymap todo above; press order no
+                                     longer matters, 2026-08-19) */
             >;
         };
     };
