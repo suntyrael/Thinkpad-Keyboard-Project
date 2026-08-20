@@ -104,6 +104,7 @@ static void led_thread_fn(void *a, void *b, void *c) {
   int tick_count = 0;
   int breath_step = 0;
   int pwr_press_ticks = 0;
+  bool pairing_prev = false; /* pairing falling-edge detector (restore LEDs) */
 
   /* Breathing duty cycle table (0 to 100) — 50 steps for a 4-second breathing
    * cycle */
@@ -213,37 +214,63 @@ static void led_thread_fn(void *a, void *b, void *c) {
       sys_poweroff();
     }
 
-    /* ---- Power LED: normal breathing, fast blink during pairing ---- */
-    if (pwm_is_ready_dt(&pwm_led)) {
-      uint32_t period = pwm_led.period;
-      /* 2026-08-19: pairing window no longer snapshots layer state at
-       * power-key press time - it opens whenever layer 1 is active while
-       * the key is held (see power_key_position_listener / layer_state_listener).
-       * The trigger itself is also board-side (zmk_ble_prof_select(0) below)
-       * so press order no longer matters; ~12.5 Hz blink while pairing. */
-      const bool pairing = pwr_held_layer1_seen && pwr_key_held &&
-                           pairing_window_start != 0 &&
-                           (k_uptime_get() - pairing_window_start >= 2000);
-      if (pairing && !pairing_triggered) {
-        /* Keymap binding for PWRSWITCH is &none (see keymap comment): the
-         * 2 s power-key hold on BT layer 1 is handled here. zmk_ble_prof_select
-         * is the same public API used by the &bt behavior. */
-        zmk_ble_prof_select(0);
-        pairing_triggered = true;
-      }
-      if (pairing) {
-        blink_on = !blink_on;
-        pwm_set_pulse_dt(&pwm_led, blink_on ? period : 0);
-        breath_step = 0; /* freeze the breathing phase while pairing */
-      } else {
-        uint32_t pulse = (period * breath_table[breath_step]) / 100;
-        pwm_set_pulse_dt(&pwm_led, pulse);
-        breath_step = (breath_step + 1) % 50;
-      }
+    /* ---- Pairing detect (board-side, 2026-08-19/20) ---- */
+    /* The 2 s window opens whenever BT layer 1 is active while the power key
+     * is held - press order no longer matters. */
+    const bool pairing = pwr_held_layer1_seen && pwr_key_held &&
+                         pairing_window_start != 0 &&
+                         (k_uptime_get() - pairing_window_start >= 2000);
+
+    /* Pairing falling edge: restore mute/mic LEDs to OFF and hand BT/breath
+     * back to the normal logic below. */
+    if (pairing_prev && !pairing) {
+      LED_OFF(gpio1_dev, MUTE_LED_PIN);
+      LED_OFF(gpio1_dev, MIC_MUTE_LED_PIN);
+    }
+    pairing_prev = pairing;
+
+    /* ---- Pairing trigger ---- */
+    if (pairing && !pairing_triggered) {
+      /* Root cause (2026-08-20): the old trigger used zmk_ble_prof_select(0)
+       * (via &bt BT_SEL 0 / ht_bt_pair AND the first board-side version).
+       * That API is a no-op when the index is already the active profile
+       * (ble.c: if (active_profile == index) return 0;) - and profile 0 is
+       * always active by default, so it never started/sent advertising, i.e.
+       * pairing never actually worked. The correct "enter pairable
+       * advertising" call is zmk_ble_clear_bonds(): it clears the active
+       * profile's bond and restarts advertising so a new host can pair.
+       * NOTE: this drops the previously paired device for this profile. */
+      zmk_ble_clear_bonds();
+      pairing_triggered = true;
     }
 
-    /* ---- Status LEDs (BT & Battery) updated every 6 ticks (~480ms) ---- */
-    if (tick_count % 6 == 0) {
+    /* ---- Pairing indication: BT + speaker-mute + mic-mute + power LEDs
+     *      blink together at ~12.5 Hz (2026-08-20) ---- */
+    if (pairing) {
+      blink_on = !blink_on;
+      if (blink_on) {
+        LED_ON(gpio1_dev, BT_LED_PIN);
+        LED_ON(gpio1_dev, MUTE_LED_PIN);
+        LED_ON(gpio1_dev, MIC_MUTE_LED_PIN);
+      } else {
+        LED_OFF(gpio1_dev, BT_LED_PIN);
+        LED_OFF(gpio1_dev, MUTE_LED_PIN);
+        LED_OFF(gpio1_dev, MIC_MUTE_LED_PIN);
+      }
+      if (pwm_is_ready_dt(&pwm_led)) {
+        pwm_set_pulse_dt(&pwm_led, blink_on ? pwm_led.period : 0);
+        breath_step = 0; /* freeze the breathing phase while pairing */
+      }
+    } else if (pwm_is_ready_dt(&pwm_led)) {
+      /* Normal power LED: breathing. */
+      uint32_t pulse = (pwm_led.period * breath_table[breath_step]) / 100;
+      pwm_set_pulse_dt(&pwm_led, pulse);
+      breath_step = (breath_step + 1) % 50;
+    }
+
+    /* ---- Status LEDs (BT & Battery) updated every 6 ticks (~480ms);
+     *      skipped while pairing (the 4-LED fast blink takes over) ---- */
+    if (tick_count % 6 == 0 && !pairing) {
       /* ---- BT LED ---- */
       if (is_idle) {
         LED_OFF(gpio1_dev, BT_LED_PIN);

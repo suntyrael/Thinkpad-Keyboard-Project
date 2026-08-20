@@ -79,7 +79,7 @@
 | 自动睡眠 | 无操作（含 TrackPoint）且无 USB | 15 min | System OFF，5V 关 |
 | 手动关机 | **长按 PWRSWITCH** | **8 s** | 写 0xAA 标记 → 灯序 → 5V 关 → System OFF |
 | 低电关机 | SoC < 2% 且无 USB | 自动 | 红灯闪 5 次 → 同手动关机（写 0xAA） |
-| 配对广播 | Fn/ThinkVantage + 长按 PWRSWITCH | ≥ 2 s（無顺序依赖） | **板级触发**：status_leds 层 1 激活+电源键 2 s 窗口 → `zmk_ble_prof_select(0)`，电源灯快闪 |
+| 配对广播 | Fn/ThinkVantage + 长按 PWRSWITCH | ≥ 2 s（無顺序依赖） | **板级**：status_leds 层 1 激活+电源键 2 s 窗口 → `zmk_ble_clear_bonds()`（清当前 BLE profile 绑定并广播，可配对新设备）→ **蓝牙灯+sport-mute+mic-mute+电源灯 4 灯同频快闪** |
 | 蓝牙切换 | Fn/ThinkVantage + 1..5 | 短按 | `&bt BT_SEL 0..4` |
 
 ---
@@ -90,7 +90,7 @@
 2. **5V_EN 双保险**：所有关机路径（手动 8 s、低电、0xAA 假唤醒回睡）都显式拉低 `P0.12`，ETA1061 True Shutdown 隔离 TrackPoint 漏电。
 3. **低电关机写标记**：防止"唤醒→低电→关机"循环（review 2.18）。
 4. **USB 在场不睡眠**：充电中不会被 15 min 定时关进 System OFF；低电关机判定同样排除 USB 供电场景。
-5. **配对不再依赖按键顺序（2026-08-19 修复）**：旧实现要求“先按层键（mo 1）再按电源键”——ZMK 在按下瞬间解析绑定（层 0 按下 = `&none`，无法挽回），且状态_leds 在按下瞬间快_layer 状态。适配器充电（USB POWERED）时键盘无 LED 反馈、易按错序 → 实测无法配对。现改为**板级配对**：status_leds 检测“按住电源键期间层 1 曾激活”即开 2 s 窗口，满足后直接调 `zmk_ble_prof_select(0)`（LED 快闪与触发合一）；keymap 的 `ht_bt_pair` 已移除。消除顺序死锁。
+5. **配对不再依赖按键顺序（2026-08-19 修复）**：旧实现要求“先按层键（mo 1）再按电源键”——ZMK 在按下瞬间解析绑定（层 0 按下 = `&none`，无法挽回），且 status_leds 在按下瞬间快照层状态。现改为**板级配对**：只要按住电源键期间层 1 曾激活即开 2 s 窗口，满足后触发配对（见下节）；keymap 的 `ht_bt_pair` hold-tap 已移除（它底层也是 `zmk_ble_prof_select(0)`，同样失效）。
 
 ## 七、已修复的开关机竞态（2026-08-19）
 
@@ -100,6 +100,8 @@
 1. **关机竞态**：PS GPIO 章节明文“Setting the system to System OFF while DETECT is high will cause a wakeup”。8 s 关机流程中用户通常仍按着电源键 → `sys_poweroff()` 瞬间 PWRSWITCH(SENSE=LOW) 触发 DETECT=高 → 芯片刚进 System OFF 就被自身 GPIO 唤醒 → 旧 0xAA 门“未按/早松 → 立即回睡”与之竞争，开机窗口仅约 100ms → 实测“按 2 s 无法开机”。修复：关机灯效后**等待电源键松开**（≤1 s）再进 System OFF。
 2. **0xAA 门过窄**：唤醒后未按电源键就立即回睡。修复：改为 **8 s 等待窗口**（任意唤醒源都给用户 8 s 开机的机会，超时才回睡，防误触保留）+ 唤醒时打印 RESETREAS 便于实测定位。
 3. **配对顺序死锁**：见上文“不再依赖按键顺序”。
+4. **配对触发 API 用错（2026-08-20 根因）**：`zmk_ble_prof_select(0)` 在 active profile 已是 0 时直接 return、**不广播不发事件**（ble.c `if (active_profile==index) return 0;`），而 profile 0 默认就是 active —— 因此旧 keymap `&bt BT_SEL 0` 与第一版板级配对**从未真正触发配对**。正确 API 是 `zmk_ble_clear_bonds()`（清绑定→重广播→可配对）。**注意：配对会清除该 profile 已保存的配对关系，需用新设备重新绑定。**
+5. **配对提示改为 4 灯快闪（2026-08-20）**：蓝牙灯 + speaker-mute + mic-mute + 电源灯同时 ~12.5 Hz 快闪，松手后恢复（mute/mic 复位为灭）。
 
 **待实测确认的硬件边界：**若电源键**严格按顺序**（先 Fn/ThinkVantage、后电源 2 s）在适配器插入时仍无法配对，则代码层无断点，需硬件排查充电器输出纹波/供电噪声导致 MCU 复位或按键事件丢失（换适配器复测或示波器量 VDD）。
 
