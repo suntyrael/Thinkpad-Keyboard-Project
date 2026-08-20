@@ -63,16 +63,16 @@ static volatile uint8_t battery_soc = 100; /* 0-100 %, default optimistic */
 static volatile bool is_idle = false;
 
 /* Pairing state machine (2026-08-20). Entered when the ThinkVantage key
- * (pos 100) is held together with the power key (pos 129) for >= 2 s. Once
- * active, pairing mode is LATCHED (the keys may be released): the 4-LED
- * blink + advertising continue until a host connects (pairing success) or a
- * 90 s timeout elapses.
+ * (P1.08, HOTKEY_PIN) is held together with the power switch (P1.11,
+ * PWRSWITCH_PIN) for >= 2 s. Both are read via RAW GPIO (like the 8 s
+ * power-off check), NOT via ZMK position events - the physical ThinkVantage
+ * key is P1.08 (board_hw.h), whereas the old code listened to pos 100 which
+ * is a different key, so pairing never armed. Once active, pairing mode is
+ * LATCHED (keys may be released): the 4-LED blink + advertising continue
+ * until a host connects (pairing success) or a 90 s timeout elapses.
  *   IDLE -> (TV+pwr held >= 2 s) -> ACTIVE (clear_bonds + advertising)
  *   ACTIVE -> (bt_connected | 90 s timeout) -> IDLE
- * Triggered ONLY by ThinkVantage, NOT by the FN key (pos 128) even though
- * both activate BT layer 1. */
-static volatile bool tv_key_held = false;    /* pos 100 ThinkVantage */
-static volatile bool pwr_key_held = false;   /* pos 129 power switch */
+ * Only the ThinkVantage key triggers pairing (not the FN/HOTKEY semantics). */
 static volatile bool pairing_active = false; /* latched pairing mode */
 static volatile int64_t pairing_arm_start =
     0; /* uptime when both keys were first simultaneously down */
@@ -219,12 +219,17 @@ static void led_thread_fn(void *a, void *b, void *c) {
       sys_poweroff();
     }
 
-    /* ---- Pairing state machine: ThinkVantage(pos100)+power(pos129) 2 s ----
-     * IDLE -> ACTIVE when both held >= 2 s; ACTIVE LATCHED until connect or
-     * 90 s timeout. FN (pos 128) does NOT participate. The 8 s manual
-     * power-off check above re-arms whenever the power key is released. */
+    /* ---- Pairing state machine: ThinkVantage(P1.08)+power(P1.11) 2 s ----
+     * RAW GPIO reads (like the 8 s power-off check above) - independent of
+     * ZMK position events / matrix transform / bindings. Wraps around the
+     * 8 s power-off check which also polls PWRSWITCH(P1.11); pairing only
+     * runs when not powering off. State: IDLE ->(both held 2 s)-> ACTIVE
+     * (latched) until connect or 90 s timeout. */
+    bool tv_down = (gpio_pin_get_raw(gpio1_dev, HOTKEY_PIN) == 0);     /* P1.08 ThinkVantage, active-low */
+    bool pwr_down = (gpio_pin_get_raw(gpio1_dev, PWRSWITCH_PIN) == 0); /* P1.11 power, active-low */
+
     if (!pairing_active) {
-      if (tv_key_held && pwr_key_held) {
+      if (tv_down && pwr_down) {
         if (pairing_arm_start == 0) {
           pairing_arm_start = k_uptime_get();
         } else if (k_uptime_get() - pairing_arm_start >= 2000) {
@@ -368,37 +373,11 @@ static int mute_leds_position_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(status_leds_mute, mute_leds_position_listener);
 ZMK_SUBSCRIPTION(status_leds_mute, zmk_position_state_changed);
 
-/* Power key (pos 129 = PWRSWITCH) held state. Used only for the pairing
- * combo with the ThinkVantage key (let the LED thread run the state machine).
- * 2026-08-20: no longer snapshots any layer state. */
-static int power_key_position_listener(const zmk_event_t *eh) {
-  const struct zmk_position_state_changed *ev =
-      as_zmk_position_state_changed(eh);
-  if (ev == NULL || ev->position != 129) {
-    return ZMK_EV_EVENT_BUBBLE;
-  }
-  pwr_key_held = ev->state;
-  return ZMK_EV_EVENT_BUBBLE;
-}
-
-ZMK_LISTENER(status_leds_pwr, power_key_position_listener);
-ZMK_SUBSCRIPTION(status_leds_pwr, zmk_position_state_changed);
-
-/* ThinkVantage key (pos 100 = matrix (5,10)) held state for pairing.
- * 2026-08-20: pairing is triggered ONLY by ThinkVantage + power, NOT by the
- * FN key (pos 128) even though both activate BT layer 1 (mo 1). */
-static int thinkvantage_position_listener(const zmk_event_t *eh) {
-  const struct zmk_position_state_changed *ev =
-      as_zmk_position_state_changed(eh);
-  if (ev == NULL || ev->position != 100) {
-    return ZMK_EV_EVENT_BUBBLE;
-  }
-  tv_key_held = ev->state;
-  return ZMK_EV_EVENT_BUBBLE;
-}
-
-ZMK_LISTENER(status_leds_tv, thinkvantage_position_listener);
-ZMK_SUBSCRIPTION(status_leds_tv, zmk_position_state_changed);
+/* NOTE (2026-08-20): pairing no longer uses ZMK position events - it reads
+ * the raw pins P1.08 (ThinkVantage) and P1.11 (power) directly in the LED
+ * thread, exactly like the 8 s power-off check. The previous position-event
+ * listeners (pos 100 / pos 129) were removed because pos 100 is not the
+ * physical ThinkVantage key and the event chain was unreliable here. */
 
 /* VBUS power state - event-driven by the nRF52840 POWER USB-detect interrupt
  * (USB_DC_CONNECTED/DISCONNECTED -> zmk_usb_conn_state_changed). No polling. */
@@ -462,8 +441,10 @@ static int status_leds_init(void) {
     return -ENODEV;
   }
 
-  /* Configure PWRSWITCH (P1.11) as input pull-up for safety */
+  /* Configure PWR switch (P1.11) and ThinkVantage (P1.08) as inputs with
+   * pull-up for the RAW pairing/power-off checks in the LED thread. */
   gpio_pin_configure(gpio1_dev, PWRSWITCH_PIN, GPIO_INPUT | GPIO_PULL_UP);
+  gpio_pin_configure(gpio1_dev, HOTKEY_PIN, GPIO_INPUT | GPIO_PULL_UP);
 
   /* Mute / mic-mute LEDs: outputs, start OFF (active-LOW: 1 = off) */
   gpio_pin_configure(gpio1_dev, MUTE_LED_PIN, GPIO_OUTPUT);
