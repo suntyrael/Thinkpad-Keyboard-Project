@@ -10,6 +10,15 @@
 - nRF52840_CoB 分支沿用旧式 `thinkpad_wireless_full_v{版本}.hex` 命名。
 - 版本号取开发日志下一版本（如现为 v1.0.46）。
 
+### v1.0.47（2026-08-21）
+
+- **修复：USB 调试串口缺失**。上一版本地构建未应用 build.yaml 的 snippets，
+  固件只有 HID/MOUSE 没有 CDC ACM。本轮以 `west -S "studio-rpc-usb-uart zmk-usb-logging"`
+  重建（与 CI 等价），`zephyr,console`/Studio RPC 两个 CDC 接口均已启用。
+- 应用向量：SP=0x200261E8 / RESET=0x35141；bootloader settings bank_0=0x0001、size=0x4F878；
+  FLASH 40.17% / RAM 63.80%。
+- 烧录后应出现：HID 键盘 + MOUSE（小红帽）+ USB 调试串口（zmk-usb-logging）。
+
 ### v1.0.46（2026-08-21）
 
 - 同步 nRF52840_CoB 全部改进（PS/2 v5-v12、电源 v20-v27、ThinkVantage BT 层等 30 项）
