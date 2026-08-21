@@ -465,3 +465,20 @@
 4. **完整镜像合并修复**：`tools/merge_hex.py` 合并完整镜像**必须加 `--mark-app-valid`**（在 0xFF000 settings 页写入 bank_0=0x0001 + crc=0 + app_size）。缺失时 adafruit bootloader 判定应用无效、停留在 DFU 模式，设备不枚举串口/HID（无响应）。烧录完整镜像需勾选 "Erase all"。`firmware/` 目录按 `thinkpad_wireless_full_v5.hex` 命名输出带版本完整镜像。
 5. **验证**：本地按 CI 命令复刻完整编译通过：FLASH 324100 B（39.96%）、RAM 167170 B（63.77%）。v5 固件实机 log 确认：`raw=0`、无 600ms 脉冲、RST 保持低。
 6. **当前 bring-up 状态（未解决）**：RST 问题已闭环，但设备传输仍为乱码（读帧 `0xfd/0xff/0xc0/0xfc/0xf9`，无 BAT 成功码 0xAA），主机写从未成功（全部 scl timeout，设备不响应）。中断日志显示读采样点 scl 全为 0（上升沿触发但采样时已回落）且数据位呈 1/0 交替——CLK 波形异常（高电平极短/振荡）。证据指向**模块供电与信号通路**：TP4 规格要求 VCC > 4.5V（当前调试用 3.3V，欠压运行），且 CLK/DATA 上拉轨 VDD3V3/5V_CONN（FPC2.19）在 CoB 板上无供电来源。下一步：模组供电改 5V、示波器验证 CLK/DATA 波形、模组接已知良好 PS/2 主机验证。
+### [2026-08-21] v1.0.46 — bmd340-module 实机启动阻塞修复：LFCLK 改内部 RC（boot 卡死闭环）+ BMD340 固件归档命名
+1. **现象**：烧录完整镜像（bootloader 标记正确、UICR=0xF4000、MBR 完好）后，上电既不枚举 USB（无 HID/串口）也不广播 BLE；J-Link 正常连接后 `memrd` 全部可读但伴随 `-256` 噪音（SWO/SWCLK 接反导致，正确接线后消失）。
+2. **排查链（J-Link 寄存器实证）**：
+   - `GPREGRET(0x4000051C)=0x0000`：排除电源管理开机门（8s 关机/低电量关机 0xAA 锁）。提醒：nRF52840 的 GPREGRET 偏移是 **0x51C**，0x540 是 GPIOREGRET。
+   - `UICR(0x10001014)=0x000F4000`：bootloader 引导链目标完好；`RESETREAS=0`：无复位风暴。
+   - `LFCLKSTAT(0x418)=0x00010000` → 按 SVD 位定义（bits0-1=SRC、bit16=STATE）实际为 **SRC=RC + running=1**——**nRF52 硬件在 XTAL 缺位时自动回退到内部 RC（用户判断正确）**；`HFCLKSTAT(0x40C)=0x00010000` 同为 **SRC=HFINT + running=1**。
+   - `EVENTS_HFCLKSTARTED/LFCLKSTARTED(0x100/0x104)=0`：**回退运行不置位 STARTED 事件**——而 Zephyr 时钟驱动按"目标类型匹配"轮询等待，LFCLK 请求为严格 XTAL 时永不满足 → 应用在时钟启动处死等（PC/LR 落于 `nrf_clock_event_clear`/`__set_BASEPRI_MAX` 附近、PRIMASK=1）。
+3. **根因**：板级原理图有外置 32.768kHz X1（FC-135R），**当前硬件未焊**；固件未配置 LFCLK 源，Zephyr nRF 默认 `CLOCK_CONTROL_NRF_K32SRC_XTAL` → 死等。32MHz 由 BMD-340 模块内部提供（bootloader 状态下实测 `HFCLKSTAT.SRC=XTAL + running=1`、两个 STARTED 事件均触发，模块晶振完好）。
+4. **修复**：`config/thinkpad_wireless.conf` 增加 `CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y`，LFCLK 显式走内部 RC，不再依赖 32.768k。焊上 X1 后可删除该配置恢复 XTAL。注意：**USB 与 BLE 仍依赖 32MHz（模块内置）**，本修复不改变该依赖。
+5. **固件归档命名约定**：`firmware/thinkpad_wireless_BMD340_full_v{版本}.hex`（全片镜像）与 `..._app_v{版本}.uf2`（拖拽用）以 BMD340 标识区分 nRF52840_CoB 的 `thinkpad_wireless_full_v{版本}.hex`；新增 `tools/make_uf2.py`（nRF52 绝对地址 UF2 转换，family 0xADA52840）。
+6. **验证**：v1.0.46 烧录后 bootloader 直接弹 nice!nano U 盘（烧录流程复位触发的 DFU 入口，非应用无效）；干净单次上电后 **HID 键盘 + MOUSE（小红帽）均出现**，boot 链路闭环。FLASH 30.64% / RAM 56.47%（无 snippets 的纯 HID 构建）。
+### [2026-08-21] v1.0.47 — USB 调试串口修复：本地构建需以 `west -S` 显式应用 build.yaml snippets
+1. **现象**：v1.0.46 已能出 HID/MOUSE，但设备管理器无 CDC 串口。
+2. **根因**：`build.yaml` 的 `snippet: studio-rpc-usb-uart zmk-usb-logging` 只被 CI 的 `build-user-config.yml` 解析（经 `west -S` 传入）；**本地直接 `west build` 不读取 build.yaml**，固件未含 CDC-ACM 串口设备 → 只有 ZMK 核心 HID 接口。
+3. **修复**：按 CI 等价方式重建：`west build ... -S "studio-rpc-usb-uart zmk-usb-logging"`。验证 `zephyr,console`/`zephyr,shell-uart`/`zmk,studio-rpc-uart` 三个 chosen 全部指向 CDC-ACM 节点、`CONFIG_ZMK_USB_LOGGING=y`。
+4. **产物重归档为 v1.0.47**：`thinkpad_wireless_BMD340_full_v1.0.47.hex`（app SP=0x200261E8 / RESET=0x35141 / size=0x4F878，FLASH 40.17% / RAM 63.80%，settings bank_0=0x0001）。
+5. **当前状态**：HID 键盘 + MOUSE + 调试串口三通道就绪；PS/2 乱码问题（TP4 供电 3.3V 欠压/上拉轨无源）仍待模组侧 5V 供电验证。
