@@ -2,6 +2,21 @@
 
 本目录存放烧录固件的辅助资产（bootloader）与完整镜像生成说明。
 
+## 版本固件命名约定（2026-08-21 起）
+
+- `thinkpad_wireless_BMD340_full_v{版本}.hex` — **bmd340-module 分支**完整镜像
+  （bootloader + SoftDevice + 应用 + bootloader settings 有效标记 + UICR，全片烧录用）
+- `thinkpad_wireless_BMD340_app_v{版本}.uf2` — 同分支应用镜像（UF2 格式，U 盘拖拽用）
+- nRF52840_CoB 分支沿用旧式 `thinkpad_wireless_full_v{版本}.hex` 命名。
+- 版本号取开发日志下一版本（如现为 v1.0.46）。
+
+### v1.0.46（2026-08-21）
+
+- 同步 nRF52840_CoB 全部改进（PS/2 v5-v12、电源 v20-v27、ThinkVantage BT 层等 30 项）
+- `CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y`：LFCLK 改用内部 RC，不依赖外置 32.768kHz 晶振 X1
+  （当前硬件未焊 X1；焊上后可删除该配置恢复 XTAL）
+- 应用向量：SP=0x200226D8 / RESET=0x2EAD9；bootloader settings bank_0=0x0001、size=0x3CA8C
+
 ## Bootloader
 
 `adafruit_bootloader_zmk.hex` — Adafruit nRF52 Bootloader（**ZMK 布局变体**，
