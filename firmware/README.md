@@ -10,7 +10,7 @@
 - nRF52840_CoB 分支沿用旧式 `thinkpad_wireless_full_v{版本}.hex` 命名。
 - 版本号取开发日志下一版本（如现为 v0.2）。
 
-### v0.2（2026-08-21）— 首个稳定发布（修复 PrtSc 与 Fn 键）
+### v0.2（2026-08-21）— 首个稳定发布（修复 PrtSc 与 Fn 键，完整实现 ThinkVantage / Fn 组合键层）
 
 - **修复：PrtSc 键 Windows 无响应**。transform 中 pos 105（PSCRN）的矩阵坐标在
   2026-08-17 去重修复（68a019c）中被误改为 X220 矩阵的空位（0x00），导致物理
@@ -20,11 +20,30 @@
 - **修复：Fn 键完全无事件**。`status_leds.c` 开机初始化对 P1.08（HOTKEY/Fn）与
   P1.11（PWRSWITCH）裸调用 `gpio_pin_configure()`，触发 Zephyr gpio_nrfx
   “Remove previously configured trigger when pin is reconfigured” 行为，把 direct
-  kscan 已挂好的 GPIOTE 中断删除（Fn/电源键从此不再产生扫描事件）。已移除这两行
-  配置——原始状态由 kscan 管理，配对/关机逻辑的 raw 读取不受影响。修复后 Fn 恢复
-  `mo 1` 层键功能（Fn+1..5 切换 BT 设备），电源键的 kscan 事件同样恢复。
-- 验证状态（2026-08-21）：键盘矩阵全键、Fn 层切换、ThinkVantage 配对、蓝牙、
-  USB HID/CDC 调试串口正常；除 PS/2（小红帽）与电池功能外其余功能调试 OK。
+  kscan 已挂好的 GPIOTE 中断删除。已移除这两行配置，恢复 Fn 与电源键扫描事件。
+- **ThinkVantage 蓝牙切换层（Layer 1）**：
+  - `ThinkVantage + F1~F5`：切换蓝牙设备 1~5（`BT_SEL 0~4`）
+  - `ThinkVantage + 电源键（长按 ≥2s）`：进入配对广播模式（4 灯快闪）
+- **Fn 扩展多媒体与控制层（Layer 2）**：
+  - `Fn + F2`：工作站锁定（`Win + L`）
+  - `Fn + F3`：电池/电源菜单（`Win + X`）
+  - `Fn + F4`：系统睡眠（`Consumer Sleep`）
+  - `Fn + F5`：WiFi / 蓝牙快捷控制面板（`Win + A`）
+  - `Fn + F6`：摄像头开关（`Ctrl + Shift + O`）
+  - `Fn + F7`：屏幕输出投影切换（`Win + P`）
+  - `Fn + F8`：小红点 TrackPoint 电源硬件开关（`&ext_power EP_TOG` 切换 5V 升压）
+  - `Fn + F12`：系统休眠（`Consumer Sleep Mode`）
+  - `Fn + Space`：网页放大（`Ctrl + =`）
+  - `Fn + Home`：屏幕亮度调高（`C_BRI_UP`）
+  - `Fn + End`：屏幕亮度调低（`C_BRI_DN`）
+  - `Fn + PrtSc`：SysRq 功能（`&kp SYSREQ`）
+  - `Fn + ScrLk`：NumLock 数字锁定功能（`&kp KP_NUM`）
+  - `Fn + Pause`：Break 中断功能（`Ctrl + Pause` / `&kp LC(PAUSE_BREAK)`）
+  - `Fn + 上箭头`：停止媒体播放（`&kp C_STOP`）
+  - `Fn + 下箭头`：媒体播放/暂停（`&kp C_PP`）
+  - `Fn + 左箭头`：下一首（`&kp C_NEXT`）
+  - `Fn + 右箭头`：上一首（`&kp C_PREV`）
+- 验证状态（2026-08-21）：键盘全键矩阵、ThinkVantage 蓝牙切换/配对、Fn 全套组合键、USB HID / CDC 调试串口正常；除 PS/2（小红帽）与电池功能外其余功能调试 OK。
 
 ### v1.0.47（2026-08-21）
 

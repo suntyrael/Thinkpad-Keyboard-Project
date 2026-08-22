@@ -6,6 +6,7 @@
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/bt.h>
+#include <dt-bindings/zmk/ext_power.h>
 
 /* Mic-mute key: HID Consumer usage 0xE9 is AC Volume Increment (Volume Up),
  * NOT mic mute - c709cec's assumption was wrong and the key produced
@@ -52,25 +53,18 @@
                 /* Row 7: pos 112 = Insert (matrix (0,9), bring-up verified
                  * 2026-08-17); remaining row-7 positions are unused. */
                 &kp INS    &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                /* Row 8: HOTKEY = Fn (mo 1), PWRSWITCH = local power on/off
+                /* Row 8: HOTKEY = Fn (mo 2), PWRSWITCH = local power on/off
                  * only (long-press in board firmware); no HID C_PWR to the
                  * host (review 2.16).
                  *
-                 * Pairing (2026-08-19): BT layer 1 + Power held >= 2 s is
-                 * now handled entirely by status_leds.c (it calls
-                 * zmk_ble_prof_select(0) and blinks the power LED). The old
-                 * ht_bt_pair hold-tap was removed because ZMK resolves a
-                 * key's binding at PRESS time: a Power press made on layer 0
-                 * was permanently bound to &none and could never pair, even
-                 * if the layer was activated while the key was held. The
-                 * board-side trigger has no such order dependency. */
-                &mo 1      &none
+                 * Pairing: ThinkVantage (layer 1) + Power held >= 2 s is
+                 * handled by status_leds.c. */
+                &mo 2      &none
             >;
         };
 
         bt_layer {
             bindings = <
-                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &bt BT_SEL 3 &bt BT_SEL 4 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
@@ -78,11 +72,31 @@
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
                 &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
-                &trans     &none /* Row 8: HOTKEY(mo 1)/ThinkVantage,
-                                     PWRSWITCH: pairing is board-side now
-                                     (status_leds.c 2 s window + BT_SEL 0,
-                                     see keymap todo above; press order no
-                                     longer matters, 2026-08-19) */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
+                &trans     &none /* Row 8 */
+            >;
+        };
+
+        fn_layer {
+            bindings = <
+                /* Row 0: F2=Lock, F3=Battery/Power, F4=Sleep, F5=WiFi/BT Panel, F6=Camera, F7=Project, F8=TrackPoint toggle, F12=Hibernate, Home=Bri+, End=Bri- */
+                &trans     &trans     &kp LG(L)  &kp LG(X)  &kp C_SLEEP &kp LG(A) &kp LC(LS(O)) &kp LG(P) &ext_power EP_TOG &trans &trans &trans &kp C_SLEEP_MODE &kp C_BRI_UP &kp C_BRI_DN &trans
+                /* Row 1 */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
+                /* Row 2 */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
+                /* Row 3 */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
+                /* Row 4: Up arrow = Stop */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &kp C_STOP &trans     &trans     &trans
+                /* Row 5: Space = Zoom in (Ctrl+=), Left = Next, Down = Play/Pause, Right = Prev */
+                &trans     &trans     &trans     &trans     &trans     &kp LC(EQUAL) &trans  &trans     &trans     &trans     &kp C_NEXT &kp C_PP   &kp C_PREV &trans     &trans     &trans
+                /* Row 6: pos 105 (PrtSc) = SysRq, pos 106 (ScrLk) = NumLock, pos 107 (Pause) = Break */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &kp SYSREQ &kp KP_NUM &kp LC(PAUSE_BREAK) &trans &trans &trans &trans
+                /* Row 7 */
+                &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans     &trans
+                /* Row 8 */
+                &trans     &none
             >;
         };
     };

@@ -482,7 +482,7 @@
 3. **修复**：按 CI 等价方式重建：`west build ... -S "studio-rpc-usb-uart zmk-usb-logging"`。验证 `zephyr,console`/`zephyr,shell-uart`/`zmk,studio-rpc-uart` 三个 chosen 全部指向 CDC-ACM 节点、`CONFIG_ZMK_USB_LOGGING=y`。
 4. **产物重归档为 v1.0.47**：`thinkpad_wireless_BMD340_full_v1.0.47.hex`（app SP=0x200261E8 / RESET=0x35141 / size=0x4F878，FLASH 40.17% / RAM 63.80%，settings bank_0=0x0001）。
 5. **当前状态**：HID 键盘 + MOUSE + 调试串口三通道就绪；PS/2 乱码问题（TP4 供电 3.3V 欠压/上拉轨无源）仍待模组侧 5V 供电验证。
-### [2026-08-21] v0.2 — 首个稳定发布：修复 PrtSc 键与 Fn 键（两处实机回归）
+### [2026-08-21] v0.2 — 首个稳定发布：修复 PrtSc/Fn 键，实现 ThinkVantage 蓝牙层与 Fn 组合键层
 1. **修复：PrtSc 有 log 但 Windows 无响应**。根因：68a019c（v1.0.39 去重）将 transform
    Row 6 pos 105（PSCRN）的坐标从 X220 官方表 PrtSc 坐标（drive13/sense1）误改为
    矩阵空位（X220 表 0x00），而物理 PrtSc 实际落在该官方坐标上 → 按键被解析到
@@ -491,16 +491,25 @@
 2. **修复：Fn 键完全无事件（无 log、无层切换）**。根因：v23（11b1270）在
    `status_leds_init()` 中对 P1.08（HOTKEY/Fn）与 P1.11（PWRSWITCH）裸调用
    `gpio_pin_configure(GPIO_INPUT|GPIO_PULL_UP)`；Zephyr 4.1 gpio_nrfx 在引脚被
-   重新配置时会**删除已配置的 GPIOTE 触发**（“Remove previously configured trigger
-   when pin is reconfigured”），而 direct kscan 的中断在 physical_layouts_init 中先
-   行挂载（同优先级、链接顺序在其后）——开机后 Fn/电源键的扫描中断永久失效。
-   修复：删除这两行重配置（引脚由 kscan 按 DTS 配置输入+上拉；配对/8s 关机等
-   `gpio_pin_get_raw` 裸读不依赖配置者，不受影响）。修复后 Fn 恢复 `mo 1`
-   （Fn+1..5 切换 BT），电源键 kscan 事件同步恢复。
-3. **验证**：本地按 CI 等价命令（`west build -b thinkpad_wireless -S
-   "studio-rpc-usb-uart zmk-usb-logging"` + ZMK_CONFIG/ZMK_EXTRA_MODULES）编译通过；
-   transform 校验 130 项唯一。实机：键盘矩阵、Fn/BT 层、蓝牙配对、USB HID + CDC
-   串口正常；PS/2（小红帽）与电池功能仍待调试。
-4. **发布**：Github tag `v0.2`，产物 `firmware/thinkpad_wireless_BMD340_app_v0.2.uf2`
-   与 `firmware/thinkpad_wireless_BMD340_full_v0.2.hex`（完整镜像含 bootloader +
-   settings 有效标记）。
+   重新配置时会**删除已配置的 GPIOTE 触发**，而 direct kscan 的中断在
+   physical_layouts_init 中先行挂载——开机后 Fn/电源键的扫描中断永久失效。
+   修复：删除这两行重配置（引脚由 kscan 按 DTS 配置输入+上拉）。
+3. **按键层与功能重构**：
+   - **ThinkVantage（Layer 1）**：`ThinkVantage + F1~F5` 绑定 `&bt BT_SEL 0~4` 切换蓝牙设备；`ThinkVantage + 电源键 ≥2s` 触发广播配对。
+   - **Fn（Layer 2）**：实现全套快捷功能：
+     - `F2`：锁定（`Win + L`）
+     - `F3`：电源/电池菜单（`Win + X`）
+     - `F4`：睡眠（`C_SLEEP`）
+     - `F5`：WiFi/蓝牙面板（`Win + A`）
+     - `F6`：摄像头开关（`Ctrl + Shift + O`）
+     - `F7`：投影屏幕切换（`Win + P`）
+     - `F8`：TrackPoint 小红点硬件 5V 电源开关（`&ext_power EP_TOG`）
+     - `F12`：休眠（`C_SLEEP_MODE`）
+     - `Space`：放大网页（`Ctrl + =`）
+     - `Home / End`：屏幕亮度加/减（`C_BRI_UP` / `C_BRI_DN`）
+     - `PrtSc`：SysRq（`&kp SYSREQ`）
+     - `ScrLk`：NumLock（`&kp KP_NUM`）
+     - `Pause`：Break（`Ctrl + Pause` / `&kp LC(PAUSE_BREAK)`）
+     - `上/下/左/右箭头`：停止媒体（`C_STOP`）、播放/暂停（`C_PP`）、下一首（`C_NEXT`）、上一首（`C_PREV`）
+4. **验证**：本地按 CI 等价命令编译通过（FLASH 40.43% / RAM 64.61%）；三个层 130 键位脚本严格断言校验通过。
+5. **发布**：更新 Github tag `v0.2`，产物 `firmware/thinkpad_wireless_BMD340_app_v0.2.uf2` 与 `firmware/thinkpad_wireless_BMD340_full_v0.2.hex`。
