@@ -10,8 +10,10 @@
 - nRF52840_CoB 分支沿用旧式 `thinkpad_wireless_full_v{版本}.hex` 命名。
 - 版本号取开发日志下一版本（如现为 v0.2）。
 
-### v0.2（2026-08-21）— 首个稳定发布（修复 PrtSc 与 Fn 键，完整实现 ThinkVantage / Fn 组合键层）
+### v0.2（2026-08-21）— BMD-340 模组首个正式发布版本（纯 HID 模式，关闭调试串口）
 
+- **目标硬件**：专用于 **u-blox BMD-340 模组**（`bmd340-module` 分支），板载天线，LFCLK 内部 RC 32.768kHz。
+- **发布特性**：关闭 USB CDC 虚拟调试串口与 PS/2 中断日志，保持纯净 USB HID / BLE HID 键盘模式，极低待机功耗与内存占用（FLASH 30.70% / RAM 26.74%）。
 - **修复：PrtSc 键 Windows 无响应**。transform 中 pos 105（PSCRN）的矩阵坐标在
   2026-08-17 去重修复（68a019c）中被误改为 X220 矩阵的空位（0x00），导致物理
   PrtSc（实际位于 sense1/drive13）落到 pos 93 的 `&trans` 上，固件未发送任何 HID。
@@ -43,7 +45,8 @@
   - `Fn + 下箭头`：媒体播放/暂停（`&kp C_PP`）
   - `Fn + 左箭头`：下一首（`&kp C_NEXT`）
   - `Fn + 右箭头`：上一首（`&kp C_PREV`）
-- 验证状态（2026-08-21）：键盘全键矩阵、ThinkVantage 蓝牙切换/配对、Fn 全套组合键、USB HID / CDC 调试串口正常；除 PS/2（小红帽）与电池功能外其余功能调试 OK。
+- **固件指标**：应用 SP=0x2000F658 / RESET=0x2EB35 / size=0x3CC90，FLASH 30.70% / RAM 26.74%。
+- 验证状态（2026-08-21）：键盘全键矩阵、ThinkVantage 蓝牙切换/配对、Fn 全套组合键、USB HID 正常；除 PS/2（小红帽）与电池功能外其余功能调试 OK。
 
 ### v1.0.47（2026-08-21）
 

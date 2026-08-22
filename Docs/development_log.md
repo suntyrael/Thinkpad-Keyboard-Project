@@ -482,19 +482,20 @@
 3. **修复**：按 CI 等价方式重建：`west build ... -S "studio-rpc-usb-uart zmk-usb-logging"`。验证 `zephyr,console`/`zephyr,shell-uart`/`zmk,studio-rpc-uart` 三个 chosen 全部指向 CDC-ACM 节点、`CONFIG_ZMK_USB_LOGGING=y`。
 4. **产物重归档为 v1.0.47**：`thinkpad_wireless_BMD340_full_v1.0.47.hex`（app SP=0x200261E8 / RESET=0x35141 / size=0x4F878，FLASH 40.17% / RAM 63.80%，settings bank_0=0x0001）。
 5. **当前状态**：HID 键盘 + MOUSE + 调试串口三通道就绪；PS/2 乱码问题（TP4 供电 3.3V 欠压/上拉轨无源）仍待模组侧 5V 供电验证。
-### [2026-08-21] v0.2 — 首个稳定发布：修复 PrtSc/Fn 键，实现 ThinkVantage 蓝牙层与 Fn 组合键层
-1. **修复：PrtSc 有 log 但 Windows 无响应**。根因：68a019c（v1.0.39 去重）将 transform
+### [2026-08-21] v0.2 — BMD-340 模组首个正式发布：纯 HID 模式（关闭串口），修复 PrtSc/Fn 键与全套组合键
+1. **目标硬件与发布定位**：专用于 **u-blox BMD-340 模组** 硬件设计（`bmd340-module` 分支）。发布版本默认**关闭 USB CDC 虚拟串口与调试日志**，以纯 USB HID / BLE HID 模式运行，大幅降低功耗与内存开销（FLASH 30.70% / RAM 26.74%）。
+2. **修复：PrtSc 有 log 但 Windows 无响应**。根因：68a019c（v1.0.39 去重）将 transform
    Row 6 pos 105（PSCRN）的坐标从 X220 官方表 PrtSc 坐标（drive13/sense1）误改为
    矩阵空位（X220 表 0x00），而物理 PrtSc 实际落在该官方坐标上 → 按键被解析到
    pos 93（`&trans`），固件不发任何 HID。修复：pos 105 恢复官方坐标，幽灵空位移入
    pos 93（仍为 `&trans`），transform 保持 130 项无重复（脚本校验通过）。
-2. **修复：Fn 键完全无事件（无 log、无层切换）**。根因：v23（11b1270）在
+3. **修复：Fn 键完全无事件（无 log、无层切换）**。根因：v23（11b1270）在
    `status_leds_init()` 中对 P1.08（HOTKEY/Fn）与 P1.11（PWRSWITCH）裸调用
    `gpio_pin_configure(GPIO_INPUT|GPIO_PULL_UP)`；Zephyr 4.1 gpio_nrfx 在引脚被
    重新配置时会**删除已配置的 GPIOTE 触发**，而 direct kscan 的中断在
    physical_layouts_init 中先行挂载——开机后 Fn/电源键的扫描中断永久失效。
    修复：删除这两行重配置（引脚由 kscan 按 DTS 配置输入+上拉）。
-3. **按键层与功能重构**：
+4. **按键层与功能重构**：
    - **ThinkVantage（Layer 1）**：`ThinkVantage + F1~F5` 绑定 `&bt BT_SEL 0~4` 切换蓝牙设备；`ThinkVantage + 电源键 ≥2s` 触发广播配对。
    - **Fn（Layer 2）**：实现全套快捷功能：
      - `F2`：锁定（`Win + L`）
@@ -511,5 +512,5 @@
      - `ScrLk`：NumLock（`&kp KP_NUM`）
      - `Pause`：Break（`Ctrl + Pause` / `&kp LC(PAUSE_BREAK)`）
      - `上/下/左/右箭头`：停止媒体（`C_STOP`）、播放/暂停（`C_PP`）、下一首（`C_NEXT`）、上一首（`C_PREV`）
-4. **验证**：本地按 CI 等价命令编译通过（FLASH 40.43% / RAM 64.61%）；三个层 130 键位脚本严格断言校验通过。
-5. **发布**：更新 Github tag `v0.2`，产物 `firmware/thinkpad_wireless_BMD340_app_v0.2.uf2` 与 `firmware/thinkpad_wireless_BMD340_full_v0.2.hex`。
+5. **验证**：本地按纯 HID Release 命令（无 snippet，ZMK_CONFIG/ZMK_EXTRA_MODULES）编译通过（FLASH 248976 B 30.70% / RAM 70090 B 26.74%）；三个层 130 键位自动化矩阵脚本严格断言校验通过。
+6. **发布**：更新 Github tag `v0.2`，产物 `firmware/thinkpad_wireless_BMD340_app_v0.2.uf2` 与 `firmware/thinkpad_wireless_BMD340_full_v0.2.hex`。
