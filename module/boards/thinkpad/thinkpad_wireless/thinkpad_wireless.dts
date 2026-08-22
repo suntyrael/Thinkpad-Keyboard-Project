@@ -52,9 +52,16 @@
             /* Row 4: Shift row */
             RC(3,14) RC(6,0)  RC(6,1)  RC(6,2)  RC(6,3)  RC(7,3)  RC(7,4)  RC(6,4)  RC(6,5)  RC(6,6)  RC(7,7)  RC(6,14) RC(5,12) RC(6,13) RC(0,13) RC(0,14)
             /* Row 5: Ctrl/Space row */
-            RC(0,15) RC(3,9)  RC(5,13) RC(4,13) RC(4,14) RC(7,8)  RC(2,12) RC(7,14) RC(7,13) RC(6,15) RC(7,12) RC(7,10) RC(7,9)  RC(1,13) RC(1,14) RC(2,14)
-            /* Row 6: Media keys */
-            RC(2,10) RC(3,10) RC(4,10) RC(6,10) RC(5,10) RC(0,11) RC(1,11) RC(6,11) RC(7,11) RC(2,11) RC(2,13) RC(6,12) RC(7,15) RC(2,15) RC(3,15) RC(4,15)
+            RC(0,15) RC(3,9)  RC(5,13) RC(4,13) RC(4,14) RC(7,8)  RC(2,12) RC(7,14) RC(7,13) RC(6,15) RC(7,12) RC(7,10) RC(7,9)  RC(2,11) RC(1,14) RC(2,14)
+            /* Row 6: Media keys
+             *
+             * pos 105 (PSCRN) uses the thinkpad-ec X220 table coordinate for
+             * PrtSc (drive=13/sense=1). The 2026-08-17 duplicate-coordinate
+             * cleanup (68a019c) mistakenly replaced it with the phantom cell
+             * 0x00 of the X220 table, so PrtSc silently resolved to pos 93
+             * (&trans) and never reached Windows - restored 2026-08-21; the
+             * phantom cell now sits on pos 93 (unused &trans). */
+            RC(2,10) RC(3,10) RC(4,10) RC(6,10) RC(5,10) RC(0,11) RC(1,11) RC(6,11) RC(7,11) RC(1,13) RC(2,13) RC(6,12) RC(7,15) RC(2,15) RC(3,15) RC(4,15)
             /* Row 7: Unused — every cell below is unique so ZMK Studio does
              * not create ghost keys from duplicated matrix coordinates
              * (review 2026-08-13 item 2.9) */

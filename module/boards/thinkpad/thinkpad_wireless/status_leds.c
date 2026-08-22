@@ -480,10 +480,16 @@ static int status_leds_init(void) {
     return -ENODEV;
   }
 
-  /* Configure PWR switch (P1.11) and ThinkVantage (P1.08) as inputs with
-   * pull-up for the RAW pairing/power-off checks in the LED thread. */
-  gpio_pin_configure(gpio1_dev, PWRSWITCH_PIN, GPIO_INPUT | GPIO_PULL_UP);
-  gpio_pin_configure(gpio1_dev, HOTKEY_PIN, GPIO_INPUT | GPIO_PULL_UP);
+  /* PWR switch (P1.11) and HOTKEY (P1.08) are deliberately NOT configured
+   * here: both pins are owned by the direct kscan (zmk,kscan-gpio-direct in
+   * thinkpad_wireless.dts, GPIO_ACTIVE_LOW | GPIO_PULL_UP). Calling
+   * gpio_pin_configure() on a pin after the kscan armed its GPIOTE interrupt
+   * makes gpio_nrfx REMOVE that trigger ("Remove previously configured
+   * trigger when pin is reconfigured", zephyr/drivers/gpio/gpio_nrfx.c) - the
+   * Fn/HOTKEY (and Power) key then never generates a scan event again (no
+   * keymap log, no layer change). The RAW reads below (gpio_pin_get_raw)
+   * work regardless of who configured the pin, so no reconfiguration is
+   * needed (v0.2, 2026-08-21). */
 
   /* Mute / mic-mute LEDs: outputs, start OFF (active-LOW: 1 = off) */
   gpio_pin_configure(gpio1_dev, MUTE_LED_PIN, GPIO_OUTPUT);

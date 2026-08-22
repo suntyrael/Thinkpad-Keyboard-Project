@@ -8,7 +8,23 @@
   （bootloader + SoftDevice + 应用 + bootloader settings 有效标记 + UICR，全片烧录用）
 - `thinkpad_wireless_BMD340_app_v{版本}.uf2` — 同分支应用镜像（UF2 格式，U 盘拖拽用）
 - nRF52840_CoB 分支沿用旧式 `thinkpad_wireless_full_v{版本}.hex` 命名。
-- 版本号取开发日志下一版本（如现为 v1.0.46）。
+- 版本号取开发日志下一版本（如现为 v0.2）。
+
+### v0.2（2026-08-21）— 首个稳定发布（修复 PrtSc 与 Fn 键）
+
+- **修复：PrtSc 键 Windows 无响应**。transform 中 pos 105（PSCRN）的矩阵坐标在
+  2026-08-17 去重修复（68a019c）中被误改为 X220 矩阵的空位（0x00），导致物理
+  PrtSc（实际位于 sense1/drive13）落到 pos 93 的 `&trans` 上，固件未发送任何 HID。
+  已恢复为 X220 官方坐标（见 `thinkpad_wireless.dts` Row 6 注释），幽灵坐标移入
+  pos 93（unused）。
+- **修复：Fn 键完全无事件**。`status_leds.c` 开机初始化对 P1.08（HOTKEY/Fn）与
+  P1.11（PWRSWITCH）裸调用 `gpio_pin_configure()`，触发 Zephyr gpio_nrfx
+  “Remove previously configured trigger when pin is reconfigured” 行为，把 direct
+  kscan 已挂好的 GPIOTE 中断删除（Fn/电源键从此不再产生扫描事件）。已移除这两行
+  配置——原始状态由 kscan 管理，配对/关机逻辑的 raw 读取不受影响。修复后 Fn 恢复
+  `mo 1` 层键功能（Fn+1..5 切换 BT 设备），电源键的 kscan 事件同样恢复。
+- 验证状态（2026-08-21）：键盘矩阵全键、Fn 层切换、ThinkVantage 配对、蓝牙、
+  USB HID/CDC 调试串口正常；除 PS/2（小红帽）与电池功能外其余功能调试 OK。
 
 ### v1.0.47（2026-08-21）
 
