@@ -514,3 +514,14 @@
      - `上/下/左/右箭头`：停止媒体（`C_STOP`）、播放/暂停（`C_PP`）、下一首（`C_NEXT`）、上一首（`C_PREV`）
 5. **验证**：本地按纯 HID Release 命令（无 snippet，ZMK_CONFIG/ZMK_EXTRA_MODULES）编译通过（FLASH 248976 B 30.70% / RAM 70090 B 26.74%）；三个层 130 键位自动化矩阵脚本严格断言校验通过。
 6. **发布**：更新 Github tag `v0.2`，产物 `firmware/thinkpad_wireless_BMD340_app_v0.2.uf2` 与 `firmware/thinkpad_wireless_BMD340_full_v0.2.hex`。
+
+### [2026-08-24] v0.2.04 — 矩阵开漏驱动 + 1ms消抖/电容建立调优与标准 6KRO 防粘键优化
+1. **背景**：针对 ThinkPad 无隔离二极管薄膜键盘同行多键同按（如 Alt+F4、Alt+Space）出现粘连/卡死及 Windows 蓝牙连接状态波动的排查与调优。
+2. **改动与修复**：
+   - **矩阵列驱动开漏输出（Open-Drain）**：`thinkpad_wireless.dts` 中全部 16 个 `col-gpios` 配置为 `(GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)`，彻底消除推挽模式下同行多键同按时的 3.3V/0V 短路对冲与 1.65V 不确定态。
+   - **消抖与电容建立调优**：`CONFIG_ZMK_KSCAN_DEBOUNCE_PRESS_MS=1`（1ms 稳健极速响应），`CONFIG_ZMK_KSCAN_DEBOUNCE_RELEASE_MS=5`（5ms 释放滤波），`CONFIG_ZMK_KSCAN_MATRIX_WAIT_BEFORE_INPUTS=5`（5µs 薄膜走线 RC 放电建立等待）。
+   - **传输与防丢包优化**：关闭 PS/2 中断日志（`CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED=n`），增大 BLE HID 队列深度（`CONFIG_ZMK_BLE_KEYBOARD_REPORT_QUEUE_SIZE=40`）。
+   - **无冲架构保持 6KRO**：针对薄膜矩阵物理无隔离二极管特性，维持标准 6KRO 结构，杜绝 Full NKRO 下鬼键闭环（Ghost Triangles）引起的虚假按键误报。
+   - **USB UART 调试串口支持**：`build.yaml` 应用 `zmk-usb-logging` snippet，支持 USB CDC-ACM 单串口抓取系统与按键日志（未开启 Studio RPC）。
+3. **固件产物**：归档 `v0.2.01` ~ `v0.2.04` 全片 HEX 与应用 UF2 镜像。
+

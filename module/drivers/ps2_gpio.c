@@ -20,7 +20,8 @@
 #define LOG_LEVEL CONFIG_PS2_LOG_LEVEL
 LOG_MODULE_REGISTER(ps2_gpio);
 
-#if defined(CONFIG_SOC_SERIES_NRF52X)
+#if IS_ENABLED(CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED) &&                       \
+    defined(CONFIG_SOC_SERIES_NRF52X)
 
 // Debug self-check (only when the edge-level interrupt log is enabled): read
 // back the nRF PIN_CNF register of the PS/2 pins and log the DRIVE field.
@@ -38,7 +39,7 @@ static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec,
           label, port_num, spec->pin, pincnf, drive);
 }
 
-#endif /* CONFIG_SOC_SERIES_NRF52X */
+#endif /* IS_ENABLED(CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED) && defined(CONFIG_SOC_SERIES_NRF52X) */
 
 /*
  * Settings

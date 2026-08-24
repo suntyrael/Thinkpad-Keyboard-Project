@@ -10,6 +10,62 @@
 - nRF52840_CoB 分支沿用旧式 `thinkpad_wireless_full_v{版本}.hex` 命名。
 - 版本号取开发日志下一版本（如现为 v0.2）。
 
+### v0.2.04（2026-08-24）— 回退为标准 6KRO 模式（消除薄膜鬼键误报）+ 保留开漏与 1ms 稳健调优
+
+- **回退标准 6KRO 架构**：
+  - 针对无隔离二极管的 ThinkPad 薄膜矩阵，关闭 Full NKRO Bitmap 模式，回退至标准的 6KRO 协议结构；
+  - 彻底杜绝多键同时按下时由于鬼键闭环（Ghost Triangles）触发的未知虚假按键误报。
+- **保留已验证的核心优化**：
+  - 矩阵列驱动开漏输出（`GPIO_OPEN_DRAIN`，消除推挽同行短路对冲与 1.65V 不确定态）；
+  - 1ms 稳健消抖 + 5ms 释放滤波 + 5µs RC 电容放电建立等待；
+  - 关闭 PS/2 中断调试日志，增大 BLE HID 队列深度（40）；
+  - 开启 USB CDC-ACM 虚拟串口日志（未开启 Studio RPC）。
+- **固件产物**：
+  - `thinkpad_wireless_BMD340_full_v0.2.04.hex`（全片镜像，带 `bank_0=0x0001` 有效标记）
+  - `thinkpad_wireless_BMD340_app_v0.2.04.uf2`（拖拽升级固件）
+- **固件指标**：FLASH 314076 B（38.73%）/ RAM 83506 B（31.86%）。
+
+### v0.2.03（2026-08-24）— 开启全键无冲（Full NKRO）+ 恢复标准 BLE 连接协商
+
+- **全键无冲（Full NKRO）**：
+  - 开启 `CONFIG_ZMK_HID_REPORT_TYPE_NKRO=y`，HID 报告切换为 Bitmap 位图结构，彻底突破标准 6KRO 限制；
+  - 配合开漏矩阵驱动，只要按键不构成矩形闭环即可实现任意多键同时按下与上报。
+- **蓝牙连接稳定性优化**：
+  - 恢复标准 BLE 连接协商参数，避免因自定义 7.5ms 极速连接间隔被 Windows 驱动拒收导致 0x13 断连；
+  - 保留 40 深度 HID 发送队列。
+- **固件产物**：
+  - `thinkpad_wireless_BMD340_full_v0.2.03.hex`（全片镜像，带 `bank_0=0x0001` 有效标记）
+  - `thinkpad_wireless_BMD340_app_v0.2.03.uf2`（拖拽升级固件）
+- **固件指标**：FLASH 314100 B（38.73%）/ RAM 83794 B（31.96%）。
+
+### v0.2.02（2026-08-24）— 开启 USB UART 调试串口（CDC-ACM 日志模式，独立单串口，不开启 Studio）
+
+- **调试特性**：
+  - 应用 `zmk-usb-logging` snippet（`CONFIG_ZMK_USB_LOGGING=y`），在 USB 复合设备中挂载单独立 CDC-ACM 虚拟串口；
+  - **未开启 Studio RPC 串口**（`studio-rpc-usb-uart` 关闭），确保串口输出为干净的纯文本日志，无二进制帧冲突；
+  - 继承 v0.2.01 的开漏矩阵驱动、1ms 消抖、5µs 电容建立时间、7.5ms BLE 连接间隔与 40 深度队列优化。
+- **固件产物**：
+  - `thinkpad_wireless_BMD340_full_v0.2.02.hex`（全片镜像，带 `bank_0=0x0001` 有效标记）
+  - `thinkpad_wireless_BMD340_app_v0.2.02.uf2`（拖拽升级固件）
+- **固件指标**：FLASH 314076 B（38.73%）/ RAM 83506 B（31.86%）。
+- **使用说明**：USB 插入 PC 后，设备管理器会出现一个虚拟 COM 端口，使用串口助手（如 PuTTY、SSCOM、VS Code Serial Monitor）连接（波特率任意，如 115200）即可实时抓取系统启动、USB 枚举、按键扫描与电源事件日志。
+
+### v0.2.01（2026-08-24）— 矩阵开漏驱动 + 1ms消抖与防粘键优化
+
+- **列驱动开漏输出（Open-Drain）**：16 个 `col-gpios` 均配置为 `(GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)`，彻底消除推挽模式下同行多键同按（如 Alt+F4、Alt+Space、Alt+方向键）导致的 3.3V/0V 短路对冲与 1.65V 不确定电平态。
+- **键盘消抖与电容建立调优**：
+  - `CONFIG_ZMK_KSCAN_DEBOUNCE_PRESS_MS=1`：1ms 稳健极速响应；
+  - `CONFIG_ZMK_KSCAN_DEBOUNCE_RELEASE_MS=5`：5ms 释放滤波，抑制触点毛刺；
+  - `CONFIG_ZMK_KSCAN_MATRIX_WAIT_BEFORE_INPUTS=5`：5µs 薄膜走线 RC 电容放电建立等待，防止虚发与漏判。
+- **传输与防丢包优化**：
+  - 彻底关闭 PS/2 中断日志（`CONFIG_PS2_GPIO_INTERRUPT_LOG_ENABLED=n`），释放系统 Workqueue 资源；
+  - `CONFIG_BT_PERIPHERAL_PREF_MIN_INT=6` / `MAX_INT=12`（7.5ms ~ 15ms 极速 BLE 连接间隔）；
+  - `CONFIG_ZMK_BLE_KEYBOARD_REPORT_QUEUE_SIZE=40`：防止高频小红点数据挤丢修饰键（Alt/Ctrl/Shift）释放包。
+- **固件产物**：
+  - `thinkpad_wireless_BMD340_full_v0.2.01.hex`（全片镜像，带 `bank_0=0x0001` 有效标记）
+  - `thinkpad_wireless_BMD340_app_v0.2.01.uf2`（拖拽升级固件）
+- **固件指标**：FLASH 248992 B（30.70%）/ RAM 70250 B（26.80%）。
+
 ### v0.2（2026-08-21）— BMD-340 模组首个正式发布版本（纯 HID 模式，关闭调试串口）
 
 - **目标硬件**：专用于 **u-blox BMD-340 模组**（`bmd340-module` 分支），板载天线，LFCLK 内部 RC 32.768kHz。
