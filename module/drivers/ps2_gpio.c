@@ -164,7 +164,13 @@ static void ps2_gpio_log_pin_drive(const struct gpio_dt_spec *spec,
 // PS/2 spec says that device must respond within 20msec,
 // but real life devices take much longer. Especially if
 // you interrupt existing transmissions.
-#define PS2_GPIO_TIMEOUT_WRITE_AWAIT_RESPONSE K_MSEC(300)
+//
+// NOTE: this must comfortably exceed the device's BAT (self-test) latency
+// after the RESET command: TrackPoints may take several hundred milliseconds
+// to send 0xAA. At 300 ms the retry loop declared failure and re-sent 0xFF,
+// and each retry's RTS clock-inhibit trampled the 0xAA frame that was just
+// arriving - the bus never got a chance to deliver any response.
+#define PS2_GPIO_TIMEOUT_WRITE_AWAIT_RESPONSE K_MSEC(1000)
 
 // Max time we allow the device to send the next clock signal during reads
 // and writes.
@@ -422,6 +428,23 @@ int ps2_gpio_configure_pin_sda_output() {
   return ps2_gpio_configure_pin_sda(PS2_GPIO_OUTPUT_FLAGS, "output");
 }
 
+// Bus health probe. MUST be called well after power-up (the v0.2.06 probe ran
+// 100 us after driver init and read false 0/0 while board RC filters on
+// CLK/DATA were still charging through the ~13k internal pull-ups).
+// With host pins as inputs + internal pull-ups:
+//   SCL=1 SDA=1 -> bus idle high, pull-ups effective (note: this alone does
+//                  NOT prove connectivity to the module - the internal pulls
+//                  put 3.3V on the MCU-side pads even with a broken trace).
+//   SCL=0 and/or SDA=0 sustained -> line actively held low by the module or
+//                  shorted to GND.
+void ps2_gpio_probe_bus_idle(const char *when) {
+  struct ps2_gpio_data *data = &ps2_gpio_data;
+
+  int scl_idle = gpio_pin_get_raw(data->scl_gpio.port, data->scl_gpio.pin);
+  int sda_idle = gpio_pin_get_raw(data->sda_gpio.port, data->sda_gpio.pin);
+  LOG_INF("PS/2 bus idle (%s): SCL=%d SDA=%d", when, scl_idle, sda_idle);
+}
+
 bool ps2_gpio_get_byte_parity(uint8_t byte) {
   int byte_parity = __builtin_parity(byte);
 
@@ -430,7 +453,10 @@ bool ps2_gpio_get_byte_parity(uint8_t byte) {
   return !byte_parity;
 }
 
-uint8_t ps2_gpio_data_queue_get_next(uint8_t *dst_byte, k_timeout_t timeout) {
+// Returns 0 on success or a negative errno (-ETIMEDOUT). NOTE: this used to
+// be declared uint8_t, which silently truncated -ETIMEDOUT into 140; callers
+// only compared against zero so it worked by accident (fixed to int).
+int ps2_gpio_data_queue_get_next(uint8_t *dst_byte, k_timeout_t timeout) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
   struct ps2_gpio_data_queue_item queue_data;
   int ret;
@@ -716,8 +742,10 @@ void ps2_gpio_read_interrupt_handler() {
     }
   }
 
-  k_work_cancel_delayable(&data->read_scl_timout);
-
+  // NOTE: no k_work_cancel_delayable here - re-scheduling below re-arms the
+  // deadline. Cancel+schedule is two scheduler-locked kernel calls per bit
+  // in ISR context; their latency windows are where BLE radio events eat
+  // clock edges (frame corruption -> device overflow bursts -> stutter).
   LOG_PS2_INT("Read interrupt", NULL);
 
   if (data->cur_read_pos == PS2_GPIO_POS_START) {
@@ -811,6 +839,15 @@ void ps2_gpio_read_abort(bool should_resend, char *reason) {
   // (callback_enabled == false), NEVER send 0xFE commands to the device, as it
   // disrupts device power-on self-test (POR) sequence!
   if (!data->callback_enabled) {
+    should_resend = false;
+  }
+
+  // While STREAMING (callback_enabled), never inject a 0xFE either: the
+  // device is continuously sending movement frames and a command write
+  // collides with the next frame, corrupting it as well. Just drop the bad
+  // frame; the mouse layer's bit-3 alignment check realigns within a frame
+  // or two.
+  if (data->callback_enabled) {
     should_resend = false;
   }
 
@@ -1000,12 +1037,23 @@ int ps2_gpio_write_byte_await_response(uint8_t byte) {
   struct ps2_gpio_data *data = &ps2_gpio_data;
   int err;
 
+  // Arm the response capture BEFORE starting the transmission. The device
+  // begins sending its response byte immediately after the ACK bit, often
+  // within a few hundred microseconds. Arming only after the blocking write
+  // returned raced against thread scheduling: under load the response byte
+  // was routed to the plain data queue instead, k_sem_take timed out and the
+  // whole command was retried even though the device had accepted it
+  // (retry storm). During the transmission mode==WRITE so the read handler
+  // never runs; the earliest byte that can hit this flag IS the response.
+  data->write_awaits_resp = true;
+
   err = ps2_gpio_write_byte_blocking(byte);
   if (err) {
+    // Transmission failed: disarm so stray bytes are not swallowed as a
+    // phantom "response" by the next unrelated transfer.
+    data->write_awaits_resp = false;
     return err;
   }
-
-  data->write_awaits_resp = true;
 
   err = k_sem_take(&data->write_awaits_resp_sem,
                    PS2_GPIO_TIMEOUT_WRITE_AWAIT_RESPONSE);
@@ -1189,8 +1237,7 @@ void ps2_gpio_write_interrupt_handler() {
     return;
   }
 
-  k_work_cancel_delayable(&data->write_scl_timout);
-
+  // Same rationale as the read handler: schedule alone re-arms the timeout.
   if (data->cur_write_pos > PS2_GPIO_POS_START &&
       data->cur_write_pos < PS2_GPIO_POS_PARITY) {
     // Set it to the data bit corresponding to the current
@@ -1446,9 +1493,12 @@ static int ps2_gpio_init_gpio(void) {
 
   // Read mode: sample on the FALLING edge (device->host data is read when CLK
   // is LOW per the PS/2 spec, starting cleanly from idle SCL HIGH).
-  ps2_gpio_set_scl_callback(true, false);
+  // Configure the pins FIRST, then attach the interrupt: enabling the
+  // interrupt on a not-yet-configured pin let spurious boot-time edges into
+  // the read handler.
   ps2_gpio_configure_pin_scl_input();
   ps2_gpio_configure_pin_sda_input();
+  ps2_gpio_set_scl_callback(true, false);
 
   // Check if this stuff is needed
   // TODO: Figure out why this is requiered.
@@ -1470,10 +1520,11 @@ static int ps2_gpio_init(const struct device *dev) {
 
   // Boot-time version marker so a mis-flashed old build is obvious in the
   // log (the app build id in the banner does not change for module edits).
-  // Marker v12: direct falling-edge ACK sampling, 600ms RST, bit-clear fix.
-  LOG_INF("PS/2 config v12: H0D1 in/out + falling-edge reads (immediate) + "
+  // Marker v13: pre-armed response capture (fixes write-retry storm caused
+  // by the response-byte race), int-returning queue getter, pin-first init.
+  LOG_INF("PS/2 config v13: H0D1 in/out + falling-edge reads (immediate) + "
           "direct ACK sampling + 600ms RST + no-resend in init + 2000us "
-          "timeout");
+          "timeout + pre-armed resp capture");
 
   // Set the ps2 device so we can retrieve it later for
   // the ps2 callback

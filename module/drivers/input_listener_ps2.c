@@ -74,6 +74,7 @@ void zmk_input_listener_ps2_layer_toggle_input_rel_received(
     const struct input_listener_ps2_config *config,
     struct input_listener_ps2_data *data);
 
+#if IS_ENABLED(CONFIG_ZMK_INPUT_MOUSE_PS2_VERBOSE_LOG)
 static char *get_input_code_name(struct input_event *evt) {
   switch (evt->code) {
   case INPUT_REL_X:
@@ -98,6 +99,7 @@ static char *get_input_code_name(struct input_event *evt) {
     return "UNKNOWN";
   }
 }
+#endif /* CONFIG_ZMK_INPUT_MOUSE_PS2_VERBOSE_LOG */
 
 static void handle_rel_code(struct input_listener_ps2_data *data,
                             struct input_event *evt) {
@@ -203,8 +205,10 @@ static void input_handler_ps2(const struct input_listener_ps2_config *config,
   // First, filter to update the event data as needed.
   filter_with_input_config(config, evt);
 
+#if IS_ENABLED(CONFIG_ZMK_INPUT_MOUSE_PS2_VERBOSE_LOG)
   LOG_DBG("Got input_handler_ps2 event: %s with value 0x%x",
           get_input_code_name(evt), evt->value);
+#endif
 
   zmk_input_listener_ps2_layer_toggle_input_rel_received(config, data);
 

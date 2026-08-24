@@ -59,6 +59,17 @@ config PS2_LOG_LEVEL
 # Error mitigation: drops packets that look like transmission errors
 # (double overflow, implausibly large jumps). Was silently never compiled
 # because the option was not defined (review 2026-08-13 item 1.5).
+# Per-packet debug/warn logging (got-packet dumps, overflow/misalignment
+# warnings). At the 100 Hz report rate these flood the USB CDC console -
+# hundreds of lines per second - and the synchronous logging inside the
+# callback workqueue stalls packet processing, which itself causes the very
+# transmission errors being logged (vicious circle, seen as cursor stutter
+# on v0.2.10). Keep off for daily use.
+config ZMK_INPUT_MOUSE_PS2_VERBOSE_LOG
+    bool "[debug] per-packet PS/2 mouse logging"
+    default n
+    depends on ZMK_INPUT_MOUSE_PS2
+
 config ZMK_INPUT_MOUSE_PS2_ENABLE_ERROR_MITIGATION
     bool "Enable transmission error mitigation in the PS/2 mouse driver"
     default n

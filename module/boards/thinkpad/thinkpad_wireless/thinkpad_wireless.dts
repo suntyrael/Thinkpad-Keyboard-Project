@@ -154,6 +154,13 @@
         compatible = "zmk,input-listener-ps2";
         status = "okay";
         device = <&mouse_ps2>;
+
+        /* TP4 module is mounted upside-down relative to host convention:
+         * pushing the stick up reports negative Y. Flip it in software.
+         * Movement counts are small at the 100 Hz default rate - scale 2x
+         * so normal-speed finger motion reaches a usable cursor speed. */
+        y-invert;
+        scale-multiplier = <2>;
     };
 
     /* Behavior node so CONFIG_ZMK_BEHAVIOR_MOUSE_SETTING compiles the

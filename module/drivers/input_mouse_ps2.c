@@ -30,10 +30,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 // Quiet period after the device has sent its POR self-test result (0xaa)
 // before the host starts sending commands. The IBM TP4 spec says activity on
 // the clock/data lines is ignored until the diagnostic sequence completes;
-// some modules also need a short settle time before they accept the first
-// host write (observed as "scl timeout at pos=1" when commands were sent
-// immediately after reading 0xaa/device-id).
-#define ZMK_MOUSE_PS2_INIT_POST_POR_SETTLE_MS 250
+// well-known projects (QMK/TMK core, Linux psmouse) use 500-1000 ms to allow
+// the internal strain-gauge filter zeroing to complete before the first host
+// write. 250 ms was observed as "scl timeout at pos=1" on 0xF2/0xE1 right
+// after POR; aligned with the CoB branch value of 1000 ms.
+#define ZMK_MOUSE_PS2_INIT_POST_POR_SETTLE_MS 1000
 
 // How often the driver try to initialize a mouse before we give up.
 #define MOUSE_PS2_INIT_ATTEMPTS 10
@@ -145,6 +146,16 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 // Responses
 #define MOUSE_PS2_RESP_SELF_TEST_PASS 0xaa
 #define MOUSE_PS2_RESP_SELF_TEST_FAIL 0xfc
+
+/* Per-packet logging gate: see ZMK_INPUT_MOUSE_PS2_VERBOSE_LOG in Kconfig.
+ * These messages fire at the report rate (up to 100 Hz) and their
+ * synchronous USB-CDC output inside the callback workqueue stalls packet
+ * handling - the direct cause of the v0.2.10 cursor stutter. */
+#if IS_ENABLED(CONFIG_ZMK_INPUT_MOUSE_PS2_VERBOSE_LOG)
+#define MOUSE_PS2_PKT_LOG(...) LOG_ ## __VA_ARGS__
+#else
+#define MOUSE_PS2_PKT_LOG(...) /* disabled */
+#endif
 
 /*
  * ZMK Defines
@@ -380,11 +391,18 @@ void zmk_mouse_ps2_activity_abort_cmd(char *reason) {
   const struct zmk_mouse_ps2_config *config = &zmk_mouse_ps2_config;
   const struct device *ps2_device = config->ps2_device;
 
-  LOG_ERR("PS/2 Mouse cmd buffer is out of aligment. Requesting resend: %s",
-          reason);
+  MOUSE_PS2_PKT_LOG(ERR("PS/2 Mouse cmd buffer is out of aligment. "
+          "Resetting buffer: %s", reason));
 
   data->packet_idx = 0;
-  ps2_write(ps2_device, MOUSE_PS2_CMD_RESEND[0]);
+
+  // Do NOT send a 0xFE resend request here. The device is streaming
+  // continuously; injecting a command mid-stream collides with the next
+  // movement frame, corrupts it too and can cascade into more errors (and
+  // the resend itself may fail while the bus is busy). The bit-3 alignment
+  // check plus the packet timeout realign the stream within one or two
+  // frames - losing a single frame's motion is far cheaper than a
+  // corruption storm.
 
   zmk_mouse_ps2_activity_reset_packet_buffer();
 }
@@ -438,20 +456,23 @@ void zmk_mouse_ps2_activity_process_cmd(zmk_mouse_ps2_packet_mode packet_mode,
   int x_delta = abs(data->prev_packet.mov_x - packet.mov_x);
   int y_delta = abs(data->prev_packet.mov_y - packet.mov_y);
 
-  LOG_DBG("Got mouse activity cmd "
+  MOUSE_PS2_PKT_LOG(DBG("Got mouse activity cmd "
           "(mov_x=%d, mov_y=%d, o_x=%d, o_y=%d, scroll=%d, "
           "b_l=%d, b_m=%d, b_r=%d) and ("
           "x_delta=%d, y_delta=%d)",
           packet.mov_x, packet.mov_y, packet.overflow_x, packet.overflow_y,
           packet.scroll, packet.button_l, packet.button_m, packet.button_r,
-          x_delta, y_delta);
+          x_delta, y_delta));
 
 #if IS_ENABLED(CONFIG_ZMK_INPUT_MOUSE_PS2_ENABLE_ERROR_MITIGATION)
-  if (packet.overflow_x == 1 && packet.overflow_y == 1) {
-    LOG_WRN("Detected overflow in both x and y. "
-            "Probably mistransmission. Aborting...");
+  // Any overflow bit means the device lost counts - the delivered deltas are
+  // garbage even if only one axis overflowed.
+  if (packet.overflow_x == 1 || packet.overflow_y == 1) {
+    MOUSE_PS2_PKT_LOG(WRN("Detected overflow bit (o_x=%d, o_y=%d). "
+            "Probably mistransmission. Aborting...",
+            packet.overflow_x, packet.overflow_y));
 
-    zmk_mouse_ps2_activity_abort_cmd("Overflow in both x and y");
+    zmk_mouse_ps2_activity_abort_cmd("Overflow bit set");
     return;
   }
 
@@ -459,15 +480,15 @@ void zmk_mouse_ps2_activity_process_cmd(zmk_mouse_ps2_packet_mode packet_mode,
   // a mistransmission or misalignment.
   // But we only do this check if there was prior movement that wasn't
   // reset in `zmk_mouse_ps2_activity_packet_timout`.
-  if ((packet.mov_x != 0 && packet.mov_y != 0) &&
+  if ((data->prev_packet.mov_x != 0 || data->prev_packet.mov_y != 0) &&
       (x_delta > 150 || y_delta > 150)) {
-    LOG_WRN("Detected malformed packet with "
+    MOUSE_PS2_PKT_LOG(WRN("Detected malformed packet with "
             "(mov_x=%d, mov_y=%d, o_x=%d, o_y=%d, scroll=%d, "
             "b_l=%d, b_m=%d, b_r=%d) and ("
             "x_delta=%d, y_delta=%d)",
             packet.mov_x, packet.mov_y, packet.overflow_x, packet.overflow_y,
             packet.scroll, packet.button_l, packet.button_m, packet.button_r,
-            x_delta, y_delta);
+            x_delta, y_delta));
     zmk_mouse_ps2_activity_abort_cmd("Exceeds movement threshold.");
     return;
   }
@@ -569,12 +590,12 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
   bool button_l_pressed = false;
   bool button_l_released = false;
   if (button_l == true && data->button_l_is_held == false) {
-    LOG_DBG("Pressed button_l");
+    MOUSE_PS2_PKT_LOG(DBG("Pressed button_l"));
 
     button_l_pressed = true;
     buttons_pressed++;
   } else if (button_l == false && data->button_l_is_held == true) {
-    LOG_DBG("Releasing button_l");
+    MOUSE_PS2_PKT_LOG(DBG("Releasing button_l"));
 
     button_l_released = true;
     buttons_released++;
@@ -583,12 +604,12 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
   bool button_m_released = false;
   bool button_m_pressed = false;
   if (button_m == true && data->button_m_is_held == false) {
-    LOG_DBG("Pressing button_m");
+    MOUSE_PS2_PKT_LOG(DBG("Pressing button_m"));
 
     button_m_pressed = true;
     buttons_pressed++;
   } else if (button_m == false && data->button_m_is_held == true) {
-    LOG_DBG("Releasing button_m");
+    MOUSE_PS2_PKT_LOG(DBG("Releasing button_m"));
 
     button_m_released = true;
     buttons_released++;
@@ -597,12 +618,12 @@ void zmk_mouse_ps2_activity_click_buttons(bool button_l, bool button_m,
   bool button_r_released = false;
   bool button_r_pressed = false;
   if (button_r == true && data->button_r_is_held == false) {
-    LOG_DBG("Pressing button_r");
+    MOUSE_PS2_PKT_LOG(DBG("Pressing button_r"));
 
     button_r_pressed = true;
     buttons_pressed++;
   } else if (button_r == false && data->button_r_is_held == true) {
-    LOG_DBG("Releasing button_r");
+    MOUSE_PS2_PKT_LOG(DBG("Releasing button_r"));
 
     button_r_released = true;
     buttons_released++;
@@ -1682,6 +1703,10 @@ static void zmk_mouse_ps2_init_thread(const struct device *dev, int unused);
 int zmk_mouse_ps2_init_power_on_reset();
 int zmk_mouse_ps2_init_wait_for_mouse(const struct device *dev);
 
+// Exported by ps2_gpio.c: logs the raw SCL/SDA idle levels. Must be called
+// late (after the rails / RC filters settled), not at driver-init time.
+extern void ps2_gpio_probe_bus_idle(const char *when);
+
 static int zmk_mouse_ps2_init(const struct device *dev) {
   LOG_DBG("Inside zmk_mouse_ps2_init");
 
@@ -1704,6 +1729,11 @@ static void zmk_mouse_ps2_init_thread(const struct device *dev, int unused) {
   const struct zmk_mouse_ps2_config *config = data->dev->config;
 
   zmk_mouse_ps2_init_power_on_reset();
+
+  // Late bus-health probe: the rails and any CLK/DATA RC filters have had
+  // seconds to settle by now (driver init ran at t=0, this thread starts at
+  // t=1s). See ps2_gpio_probe_bus_idle() for how to read the result.
+  ps2_gpio_probe_bus_idle("post-RST");
 
   LOG_INF("Waiting for mouse to connect...");
   err = zmk_mouse_ps2_init_wait_for_mouse(data->dev);
@@ -1910,6 +1940,11 @@ int zmk_mouse_ps2_init_wait_for_mouse(const struct device *dev) {
 
     LOG_INF("Trying to initialize mouse device (attempt %d / %d)", i + 1,
             MOUSE_PS2_INIT_ATTEMPTS);
+
+    // Live bus-health line per attempt: lets the bench operator watch SCL/SDA
+    // while wiggling the FPC/connectors. A healthy bus idles 1/1; flipping to
+    // 0/0 under mechanical stress = intermittent contact.
+    ps2_gpio_probe_bus_idle("attempt");
 
     // PS/2 Devices do a self-test and send the result when they power up.
 
